@@ -19,6 +19,7 @@
  */
 package org.nuxeo.ecm.core.event.impl;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -40,6 +41,18 @@ import org.nuxeo.ecm.core.event.EventStats;
 import org.nuxeo.ecm.core.event.ReconnectedEventBundle;
 import org.nuxeo.runtime.api.Framework;
 import org.nuxeo.runtime.transaction.TransactionHelper;
+
+import io.opencensus.common.Scope;
+import io.opencensus.trace.AttributeValue;
+import io.opencensus.trace.BlankSpan;
+import io.opencensus.trace.Link;
+import io.opencensus.trace.Span;
+import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.Status;
+import io.opencensus.trace.Tracer;
+import io.opencensus.trace.Tracing;
+import io.opencensus.trace.propagation.BinaryFormat;
+import io.opencensus.trace.propagation.SpanContextParseException;
 
 /**
  * Executor that passes an event bundle to post-commit asynchronous listeners (in a separated thread in order to manage
@@ -213,12 +226,17 @@ public class PostCommitEventExecutor {
 
         protected final EventBundle bundle;
 
+        protected final byte[] traceContext;
+
         protected String callerThread;
 
         public EventBundleRunner(List<EventListenerDescriptor> listeners, EventBundle bundle) {
             this.listeners = listeners;
             this.bundle = bundle;
             callerThread = SequenceTracer.getThreadName();
+            traceContext = Tracing.getPropagationComponent()
+                                    .getBinaryFormat()
+                                    .toByteArray(Tracing.getTracer().getCurrentSpan().getContext());
         }
 
         @Override
@@ -226,61 +244,69 @@ public class PostCommitEventExecutor {
             if (log.isDebugEnabled()) {
                 log.debug("Events postcommit execution starting in thread: " + Thread.currentThread().getName());
             }
+            Span span = getTracingSpan("postcommit.EventBundleRunner");
             SequenceTracer.startFrom(callerThread, "Postcommit", "#ff410f");
             long t0 = System.currentTimeMillis();
             EventStats stats = Framework.getService(EventStats.class);
-
-            for (EventListenerDescriptor listener : listeners) {
-                EventBundle filtered = listener.filterBundle(bundle);
-                if (filtered.isEmpty()) {
-                    continue;
-                }
-                if (log.isDebugEnabled()) {
-                    log.debug("Events postcommit execution start for listener: " + listener.getName());
-                }
-                SequenceTracer.start("run listener " + listener.getName());
-                long t1 = System.currentTimeMillis();
-
-                boolean ok = false;
-                ReconnectedEventBundle reconnected = null;
-                // transaction timeout is managed by the FutureTask
-                boolean tx = TransactionHelper.startTransaction();
-                try {
-                    reconnected = new ReconnectedEventBundleImpl(filtered, listeners.toString());
-
-                    listener.asPostCommitListener().handleEvent(reconnected);
-
-                    ok = true;
-                    // don't check for interrupted flag, the event completed normally, no reason to rollback
-                } catch (RuntimeException e) {
-                    log.error("Events postcommit execution encountered exception for listener: " + listener.getName(),
-                            e);
-                    // don't rethrow, but rollback (ok=false) and continue loop
-                } finally {
-                    try {
-                        if (reconnected != null) {
-                            reconnected.disconnect();
-                        }
-                    } finally {
-                        if (tx) {
-                            if (!ok) {
-                                TransactionHelper.setTransactionRollbackOnly();
-                                log.error("Rolling back transaction");
-                            }
-                            TransactionHelper.commitOrRollbackTransaction();
-                        }
-                        long elapsed = System.currentTimeMillis() - t1;
-                        if (stats != null) {
-                            stats.logAsyncExec(listener, elapsed);
-                        }
-                        if (log.isDebugEnabled()) {
-                            log.debug("Events postcommit execution end for listener: " + listener.getName() + " in "
-                                    + elapsed + "ms");
-                        }
-                        SequenceTracer.stop("listener done " + elapsed + " ms");
+            try (Scope scope = Tracing.getTracer().withSpan(span)) {
+                for (EventListenerDescriptor listener : listeners) {
+                    EventBundle filtered = listener.filterBundle(bundle);
+                    if (filtered.isEmpty()) {
+                        continue;
                     }
+                    if (log.isDebugEnabled()) {
+                        log.debug("Events postcommit execution start for listener: " + listener.getName());
+                    }
+                    SequenceTracer.start("run listener " + listener.getName());
+                    long t1 = System.currentTimeMillis();
+
+                    boolean ok = false;
+                    ReconnectedEventBundle reconnected = null;
+                    // transaction timeout is managed by the FutureTask
+                    boolean tx = TransactionHelper.startTransaction();
+                    try {
+                        reconnected = new ReconnectedEventBundleImpl(filtered, listeners.toString());
+
+                        listener.asPostCommitListener().handleEvent(reconnected);
+
+                        ok = true;
+                        // don't check for interrupted flag, the event completed normally, no reason to rollback
+                    } catch (RuntimeException e) {
+                        log.error(
+                                "Events postcommit execution encountered exception for listener: " + listener.getName(),
+                                e);
+                        span.setStatus(Status.UNKNOWN);
+                        // don't rethrow, but rollback (ok=false) and continue loop
+                    } finally {
+                        try {
+                            if (reconnected != null) {
+                                reconnected.disconnect();
+                            }
+                        } finally {
+                            if (tx) {
+                                if (!ok) {
+                                    TransactionHelper.setTransactionRollbackOnly();
+                                    log.error("Rolling back transaction");
+                                }
+                                TransactionHelper.commitOrRollbackTransaction();
+                            }
+                            long elapsed = System.currentTimeMillis() - t1;
+                            if (stats != null) {
+                                stats.logAsyncExec(listener, elapsed);
+                            }
+                            if (log.isDebugEnabled()) {
+                                log.debug("Events postcommit execution end for listener: " + listener.getName() + " in "
+                                        + elapsed + "ms");
+                            }
+                            SequenceTracer.stop("listener done " + elapsed + " ms");
+                            span.addAnnotation("Listener " + listener.getName() + " " + elapsed + " ms");
+                        }
+                    }
+                    // even if interrupted due to timeout, we continue the loop
                 }
-                // even if interrupted due to timeout, we continue the loop
+                span.setStatus(Status.OK);
+            } finally {
+                span.end();
             }
             long elapsed = System.currentTimeMillis() - t0;
             if (log.isDebugEnabled()) {
@@ -288,6 +314,28 @@ public class PostCommitEventExecutor {
             }
             SequenceTracer.stop("postcommit done" + elapsed + " ms");
             return Boolean.TRUE; // no error to report
+        }
+
+        protected Span getTracingSpan(String spanName) {
+            if (traceContext == null) {
+                return BlankSpan.INSTANCE;
+            }
+            Tracer tracer = Tracing.getTracer();
+            BinaryFormat binaryFormat = Tracing.getPropagationComponent().getBinaryFormat();
+            try {
+                SpanContext spanContext = binaryFormat.fromByteArray(traceContext);
+                Span span = tracer.spanBuilderWithRemoteParent(spanName, spanContext).startSpan();
+                span.addLink(Link.fromSpanContext(spanContext, Link.Type.PARENT_LINKED_SPAN));
+                HashMap<String, AttributeValue> map = new HashMap<>();
+                map.put("tx.thread", AttributeValue.stringAttributeValue(Thread.currentThread().getName()));
+                map.put("bundle.event_count", AttributeValue.longAttributeValue(bundle.size()));
+                map.put("bundle.caller_thread", AttributeValue.stringAttributeValue(callerThread));
+                span.putAttributes(map);
+                return span;
+            } catch (SpanContextParseException e) {
+                log.warn("Invalid trace context: " + traceContext.length);
+            }
+            return BlankSpan.INSTANCE;
         }
     }
 
@@ -305,16 +353,23 @@ public class PostCommitEventExecutor {
         protected final List<EventListenerDescriptor> listeners;
 
         protected final EventBundle bundle;
+
         protected final String callerThread;
+
+        protected final byte[] traceContext;
 
         public EventBundleBulkRunner(List<EventListenerDescriptor> listeners, EventBundle bundle) {
             this.listeners = listeners;
             this.bundle = bundle;
             callerThread = SequenceTracer.getThreadName();
+            traceContext = Tracing.getPropagationComponent()
+                                    .getBinaryFormat()
+                                    .toByteArray(Tracing.getTracer().getCurrentSpan().getContext());
         }
 
         @Override
         public Boolean call() {
+            Span span = getTracingSpan("postcommit.EventBundleBulkRunner");
             SequenceTracer.startFrom(callerThread, "BulkPostcommit", "#ff410f");
             if (log.isDebugEnabled()) {
                 log.debug("Events postcommit bulk execution starting in thread: " + Thread.currentThread().getName());
@@ -326,7 +381,7 @@ public class PostCommitEventExecutor {
             ReconnectedEventBundle reconnected = null;
             // transaction timeout is managed by the FutureTask
             boolean tx = TransactionHelper.startTransaction();
-            try {
+            try (Scope scope = Tracing.getTracer().withSpan(span)) {
                 reconnected = new ReconnectedEventBundleImpl(bundle, listeners.toString());
                 for (EventListenerDescriptor listener : listeners) {
                     EventBundle filtered = listener.filterBundle(reconnected);
@@ -351,6 +406,7 @@ public class PostCommitEventExecutor {
                         log.error(
                                 "Events postcommit bulk execution encountered exception for listener: "
                                         + listener.getName(), e);
+                        span.setStatus(Status.UNKNOWN);
                         return Boolean.FALSE; // report error
                     } finally {
                         long elapsed = System.currentTimeMillis() - t1;
@@ -359,6 +415,7 @@ public class PostCommitEventExecutor {
                                     + " in " + elapsed + "ms");
                         }
                         SequenceTracer.stop("listener done " + elapsed + " ms");
+                        span.addAnnotation("Listener " + listener.getName() + " " + elapsed + " ms");
                     }
                     if (interrupt) {
                         break;
@@ -384,8 +441,31 @@ public class PostCommitEventExecutor {
                 if (log.isDebugEnabled()) {
                     log.debug("Events postcommit bulk execution finished in " + elapsed + "ms");
                 }
+                span.end();
             }
             return Boolean.TRUE; // no error to report
+        }
+
+        protected Span getTracingSpan(String spanName) {
+            if (traceContext == null) {
+                return BlankSpan.INSTANCE;
+            }
+            Tracer tracer = Tracing.getTracer();
+            BinaryFormat binaryFormat = Tracing.getPropagationComponent().getBinaryFormat();
+            try {
+                SpanContext spanContext = binaryFormat.fromByteArray(traceContext);
+                Span span = tracer.spanBuilderWithRemoteParent(spanName, spanContext).startSpan();
+                span.addLink(Link.fromSpanContext(spanContext, Link.Type.PARENT_LINKED_SPAN));
+                HashMap<String, AttributeValue> map = new HashMap<>();
+                map.put("tx.thread", AttributeValue.stringAttributeValue(Thread.currentThread().getName()));
+                map.put("bundle.event_count", AttributeValue.longAttributeValue(bundle.size()));
+                map.put("bundle.caller_thread", AttributeValue.stringAttributeValue(callerThread));
+                span.putAttributes(map);
+                return span;
+            } catch (SpanContextParseException e) {
+                log.warn("Invalid trace context: " + traceContext.length);
+            }
+            return BlankSpan.INSTANCE;
         }
     }
 }

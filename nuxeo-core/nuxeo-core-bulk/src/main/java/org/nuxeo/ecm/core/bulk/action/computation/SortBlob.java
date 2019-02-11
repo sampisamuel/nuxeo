@@ -69,6 +69,7 @@ public class SortBlob extends AbstractTransientBlobComputation {
         DataBucket in = codec.decode(record.getData());
 
         String commandId = in.getCommandId();
+
         String storeName = Framework.getService(BulkService.class).getStatus(commandId).getAction();
         Blob tmpBlob = getBlob(in.getDataAsString(), storeName);
         tmpBlob = sort(tmpBlob, commandId);

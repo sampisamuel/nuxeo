@@ -19,7 +19,6 @@
 package org.nuxeo.ecm.core.bulk.action.computation;
 
 import java.io.Serializable;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.Map;
 
@@ -52,6 +51,7 @@ public class ExposeBlob extends AbstractTransientBlobComputation {
         Codec<DataBucket> codec = BulkCodecs.getDataBucketCodec();
         DataBucket in = codec.decode(record.getData());
         String commandId = in.getCommandId();
+
         long documents = in.getCount();
 
         String storeName = Framework.getService(BulkService.class).getStatus(commandId).getAction();
