@@ -22,6 +22,7 @@ import static org.apache.logging.log4j.Level.INFO;
 import static org.apache.logging.log4j.LogManager.ROOT_LOGGER_NAME;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -31,6 +32,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 
+import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -61,6 +64,19 @@ import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import com.codahale.metrics.log4j2.InstrumentedAppender;
 import com.readytalk.metrics.StatsDReporter;
+
+import io.opencensus.contrib.dropwizard.DropWizardMetrics;
+import io.opencensus.contrib.zpages.ZPageHandlers;
+import io.opencensus.exporter.stats.prometheus.PrometheusStatsCollector;
+import io.opencensus.exporter.trace.jaeger.JaegerTraceExporter;
+import io.opencensus.exporter.trace.zipkin.ZipkinTraceExporter;
+import io.opencensus.metrics.Metrics;
+import io.opencensus.metrics.export.Metric;
+import io.opencensus.trace.Tracing;
+import io.opencensus.trace.config.TraceConfig;
+import io.opencensus.trace.config.TraceParams;
+import io.opencensus.trace.samplers.Samplers;
+import io.prometheus.client.exporter.HTTPServer;
 
 @XObject("metrics")
 public class MetricsDescriptor implements Serializable {
@@ -520,6 +536,135 @@ public class MetricsDescriptor implements Serializable {
         }
     }
 
+    @XObject(value = "openCensus")
+    public static class OpenCensusDescriptor {
+
+        public static final String ENABLED_PROPERTY = "opencensus.enabled";
+
+        public static final String PORT_PROPERTY = "opencensus.prometheus.port";
+
+        public static final String ZPORT_PROPERTY = "opencensus.zpages.port";
+
+        public static final String JAEGER_URL_PROPERTY = "opencensus.exporter.jaeger.url";
+
+        public static final String ZIPKIN_URL_PROPERTY = "opencensus.exporter.zipkin.url";
+
+        public static final String SERVICE_NAME_PROPERTY = "opencensus.exporter.service.name";
+
+        public static final String SAMPLER_PROB_PROPERTY = "opencensus.sampler.probability";
+
+        public static final String MAX_ATTRIBUTES_PROPERTY = "opencensus.attributes.max";
+
+        public static final String MAX_ANNOTATION_PROPERTY = "opencensus.annotations.max";
+
+        @XNode("@enabled")
+        protected boolean enabled = Boolean.parseBoolean(Framework.getProperty(ENABLED_PROPERTY, "false"));
+
+        // Expose metrics to Prometheus, usual port should be 8888
+        @XNode("@prometheusPort")
+        public Integer prometheusPort = Integer.valueOf(Framework.getProperty(PORT_PROPERTY, "0"));
+
+        // Expose OpenCensus zpages
+        @XNode("@zPagesPort")
+        public Integer zPagesPort = Integer.valueOf(Framework.getProperty(ZPORT_PROPERTY, "0"));
+
+        // Thrift endpoint like: http://127.0.0.1:14268/api/traces
+        @XNode("@jaeger")
+        public String jaeger = Framework.getProperty(JAEGER_URL_PROPERTY);
+
+        // http://zipkin:9411/api/v2/spans
+        @XNode("@zipkin")
+        public String zipkin = Framework.getProperty(ZIPKIN_URL_PROPERTY);
+
+        @XNode("@serviceName")
+        public String serviceName = Framework.getProperty(SERVICE_NAME_PROPERTY, "nuxeo");
+
+        // between 0.0 and 1.0 (1 means always sample)
+        @XNode("@samplerProbability")
+        public Float samplerProbability = Float.valueOf(Framework.getProperty(SAMPLER_PROB_PROPERTY, "0.1"));
+
+        // max number of annotations per span
+        @XNode("@maxAnnotations")
+        public Integer maxAnnotations = Integer.valueOf(Framework.getProperty(MAX_ANNOTATION_PROPERTY, "128"));
+
+        // max number of attributes
+        @XNode("@maxAttributes")
+        public Integer maxAttributes = Integer.valueOf(Framework.getProperty(MAX_ATTRIBUTES_PROPERTY, "128"));
+
+        protected HTTPServer server;
+
+        public void enable(MetricRegistry registry) {
+            if (!enabled) {
+                return;
+            }
+            Log log = LogFactory.getLog(MetricsServiceImpl.class);
+            log.debug("Enabling OpenCensus");
+            if (prometheusPort > 0) {
+                DropWizardMetrics registries = new DropWizardMetrics(Collections.singletonList(registry));
+                Metrics.getExportComponent().getMetricProducerManager().add(registries);
+                ArrayList<Metric> metrics = new ArrayList<>(registries.getMetrics());
+                log.debug("OpenCensus number of dropwizard metrics exposed to prometheus: " + metrics.size());
+                PrometheusStatsCollector.createAndRegister();
+                try {
+                    server = new HTTPServer(prometheusPort, true);
+                    if (zPagesPort > 0) {
+                        ZPageHandlers.startHttpServerAndRegisterAll(zPagesPort);
+                    }
+                } catch (IOException e) {
+                    throw new IllegalArgumentException("Cannot start prometheus server on port: " + prometheusPort, e);
+                }
+                log.info("OpenCensus Prometheus started");
+            }
+            if (jaeger != null) {
+                log.debug("OpenCensus creating Jaeger tracer");
+                JaegerTraceExporter.createAndRegister(jaeger, serviceName);
+                addTracing();
+                log.info("OpenCensus Jaeger tracer started");
+            }
+            if (zipkin != null) {
+                log.debug("OpenCensus creating Zipkin tracer");
+                ZipkinTraceExporter.createAndRegister(zipkin, serviceName);
+                addTracing();
+                log.info("OpenCensus Zipkin tracer started");
+            }
+        }
+
+        protected void addTracing() {
+            TraceConfig traceConfig = Tracing.getTraceConfig();
+            TraceParams activeTraceParams = traceConfig.getActiveTraceParams();
+            TraceParams.Builder builder = activeTraceParams.toBuilder();
+            builder.setMaxNumberOfAttributes(maxAttributes).setMaxNumberOfAnnotations(maxAnnotations);
+            if (samplerProbability >= 0.999) {
+                builder.setSampler(Samplers.alwaysSample());
+            } else if (samplerProbability <= 0.001) {
+                builder.setSampler(Samplers.neverSample());
+            } else {
+                builder.setSampler(Samplers.probabilitySampler(samplerProbability));
+            }
+            traceConfig.updateActiveTraceParams(builder.build());
+        }
+
+        public void disable(MetricRegistry registry) {
+            if (!enabled) {
+                return;
+            }
+            if (server != null) {
+                server.stop();
+                server = null;
+            }
+            // Gracefully shutdown the exporter, so that it'll flush queued traces
+            Tracing.getExportComponent().shutdown();
+            if (jaeger != null) {
+                JaegerTraceExporter.unregister();
+            }
+            if (zipkin != null) {
+                ZipkinTraceExporter.unregister();
+            }
+            Log log = LogFactory.getLog(MetricsServiceImpl.class);
+            log.info("OpenCensus disabled");
+        }
+    }
+
     @XNode("graphiteReporter")
     public GraphiteDescriptor graphiteReporter = new GraphiteDescriptor();
 
@@ -540,6 +685,9 @@ public class MetricsDescriptor implements Serializable {
 
     protected JmxReporter jmxReporter;
 
+    @XNode("openCensus")
+    public OpenCensusDescriptor openCensusDescriptor = new OpenCensusDescriptor();
+
     public void enable(MetricRegistry registry) {
         jmxReporter = JmxReporter.forRegistry(registry).build();
         jmxReporter.start();
@@ -549,6 +697,7 @@ public class MetricsDescriptor implements Serializable {
         tomcatInstrumentation.enable(registry);
         jvmInstrumentation.enable(registry);
         statsDReporter.enable(registry);
+        openCensusDescriptor.enable(registry);
     }
 
     public void disable(MetricRegistry registry) {
@@ -558,7 +707,8 @@ public class MetricsDescriptor implements Serializable {
             log4jInstrumentation.disable(registry);
             tomcatInstrumentation.disable(registry);
             jvmInstrumentation.disable(registry);
-            statsDReporter.enable(registry);
+            statsDReporter.disable(registry);
+            openCensusDescriptor.disable(registry);
             jmxReporter.stop();
         } finally {
             jmxReporter = null;
