@@ -41,6 +41,7 @@
 
   <extension target="org.nuxeo.ecm.core.bulk" point="actions">
     <!-- Internal -->
+    <action name="deletion" bucketSize="100" batchSize="25" />
     <action name="trash" bucketSize="100" batchSize="25" sequentialCommands="true" />
     <action name="removeProxy" bucketSize="100" batchSize="25" />
     <action name="setSystemProperties" bucketSize="100" batchSize="25" />
@@ -51,6 +52,12 @@
 
   <!-- Action's processor -->
   <extension target="org.nuxeo.runtime.stream.service" point="streamProcessor">
+    <!-- Deletion processor -->
+    <streamProcessor name="deletion" class="org.nuxeo.ecm.core.bulk.action.DeletionAction" logConfig="bulk"
+      defaultConcurrency="2" defaultPartitions="2">
+      <policy name="default" maxRetries="3" delay="500ms" maxDelay="10s" continueOnFailure="false" />
+    </streamProcessor>
+
     <!-- SetProperty processor -->
     <streamProcessor name="setProperties" class="org.nuxeo.ecm.core.bulk.action.SetPropertiesAction" logConfig="bulk"
       defaultConcurrency="2" defaultPartitions="2">

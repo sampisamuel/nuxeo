@@ -67,15 +67,19 @@ public class RemoveProxyAction implements StreamProcessorTopology {
 
         @Override
         protected void compute(CoreSession session, List<String> ids, Map<String, Serializable> properties) {
-            String query = String.format(QUERY_TEMPLATE, String.join("', '", ids));
-            Set<DocumentRef> proxies = new HashSet<>();
-            try (IterableQueryResult res = session.queryAndFetch(query, NXQL.NXQL)) {
-                for (Map<String, Serializable> map : res) {
-                    proxies.add(new IdRef((String) map.get(NXQL.ECM_UUID)));
-                }
-            }
-            session.removeDocuments(proxies.toArray(new DocumentRef[0]));
-            session.save();
+            removeProxies(session, ids);
         }
+    }
+
+    public static void removeProxies(CoreSession session, List<String> ids) {
+        Set<DocumentRef> proxies = new HashSet<>();
+        String query = String.format(QUERY_TEMPLATE, String.join("', '", ids));
+        try (IterableQueryResult res = session.queryAndFetch(query, NXQL.NXQL)) {
+            for (Map<String, Serializable> map : res) {
+                proxies.add(new IdRef((String) map.get(NXQL.ECM_UUID)));
+            }
+        }
+        session.removeDocuments(proxies.toArray(new DocumentRef[0]));
+        session.save();
     }
 }

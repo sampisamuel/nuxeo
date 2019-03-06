@@ -25,6 +25,7 @@ import static org.nuxeo.ecm.core.api.event.DocumentEventCategories.EVENT_DOCUMEN
 import static org.nuxeo.ecm.core.api.trash.TrashService.DOCUMENT_TRASHED;
 import static org.nuxeo.ecm.core.api.trash.TrashService.DOCUMENT_UNTRASHED;
 import static org.nuxeo.ecm.core.bulk.BulkServiceImpl.STATUS_STREAM;
+import static org.nuxeo.ecm.core.bulk.action.RemoveProxyAction.removeProxies;
 import static org.nuxeo.lib.stream.computation.AbstractComputation.INPUT_1;
 import static org.nuxeo.lib.stream.computation.AbstractComputation.OUTPUT_1;
 
@@ -32,10 +33,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -91,23 +90,6 @@ public class TrashAction implements StreamProcessorTopology {
                 removeProxies(session, ids);
             }
             setSystemProperty(session, ids, trashValue);
-        }
-
-        protected void removeProxies(CoreSession session, List<String> ids) {
-            Set<DocumentRef> proxies = new HashSet<>();
-            String query = String.format(PROXY_QUERY_TEMPLATE, String.join("', '", ids));
-            try (IterableQueryResult res = session.queryAndFetch(query, NXQL.NXQL)) {
-                for (Map<String, Serializable> map : res) {
-                    proxies.add(new IdRef((String) map.get(NXQL.ECM_UUID)));
-                }
-            }
-            session.removeDocuments(proxies.toArray(new DocumentRef[0]));
-            try {
-                session.save();
-            } catch (PropertyException e) {
-                // TODO send to error stream
-                log.warn("Cannot save session", e);
-            }
         }
 
         public void setSystemProperty(CoreSession session, List<String> ids, Boolean value) {
