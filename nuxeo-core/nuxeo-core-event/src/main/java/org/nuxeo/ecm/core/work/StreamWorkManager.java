@@ -23,10 +23,12 @@ import static org.nuxeo.ecm.core.work.api.WorkManager.Scheduling.CANCEL_SCHEDULE
 
 import java.lang.reflect.Field;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 import javax.naming.NamingException;
 import javax.transaction.RollbackException;
@@ -45,10 +47,13 @@ import org.nuxeo.ecm.core.work.api.WorkQueueDescriptor;
 import org.nuxeo.ecm.core.work.api.WorkQueueMetrics;
 import org.nuxeo.ecm.core.work.api.WorkSchedulePath;
 import org.nuxeo.lib.stream.computation.Record;
+import org.nuxeo.lib.stream.computation.RecordFilter;
+import org.nuxeo.lib.stream.computation.RecordFilterChain;
 import org.nuxeo.lib.stream.computation.Settings;
 import org.nuxeo.lib.stream.computation.StreamManager;
 import org.nuxeo.lib.stream.computation.StreamProcessor;
 import org.nuxeo.lib.stream.computation.Topology;
+import org.nuxeo.lib.stream.computation.internals.RecordFilterChainImpl;
 import org.nuxeo.lib.stream.log.LogAppender;
 import org.nuxeo.lib.stream.log.LogLag;
 import org.nuxeo.lib.stream.log.LogManager;
@@ -99,6 +104,8 @@ public class StreamWorkManager extends WorkManagerImpl {
     public static final String STATETTL_DEFAULT_VALUE = "3600";
 
     protected Topology topology;
+
+    protected Topology topologyDisabled;
 
     protected Settings settings;
 
@@ -195,6 +202,7 @@ public class StreamWorkManager extends WorkManagerImpl {
             initTopology();
             logManager = getLogManager();
             streamManager = getStreamManager();
+            streamManager.register("SWMDisable", topologyDisabled, settings);
             streamManager.register("SWM", topology, settings);
             streamProcessor = streamManager.createStreamProcessor("SWM");
             started = true;
@@ -283,17 +291,26 @@ public class StreamWorkManager extends WorkManagerImpl {
     }
 
     protected void initTopology() {
-        // create a single topology with one root per work pool
+        // create the single topology with one root per work pool
         Topology.Builder builder = Topology.builder();
-        workQueueConfig.getQueueIds().stream().filter(item -> workQueueConfig.get(item).isProcessingEnabled()).forEach(
-                item -> builder.addComputation(() -> new WorkComputation(item),
-                        Collections.singletonList("i1:" + item)));
+        Collection<WorkQueueDescriptor> descriptors = workQueueConfig.registry.values();
+        descriptors.stream().filter(WorkQueueDescriptor::isProcessingEnabled).forEach(d -> builder.addComputation(
+                () -> new WorkComputation(d.id), Collections.singletonList("i1:" + d.id)));
         topology = builder.build();
-        settings = new Settings(DEFAULT_CONCURRENCY, getPartitions(DEFAULT_CONCURRENCY));
-        workQueueConfig.getQueueIds()
-                       .forEach(item -> settings.setConcurrency(item, workQueueConfig.get(item).getMaxThreads()));
-        workQueueConfig.getQueueIds().forEach(
-                item -> settings.setPartitions(item, getPartitions(workQueueConfig.get(item).getMaxThreads())));
+        // create a topology for the disabled work pools in order to init their input streams
+        Topology.Builder builderDisabled = Topology.builder();
+        descriptors.stream()
+                   .filter(wqd -> ! wqd.isProcessingEnabled())
+                   .forEach(d -> builderDisabled.addComputation(() -> new WorkComputation(d.id),
+                           Collections.singletonList("i1:" + d.id)));
+        topologyDisabled = builderDisabled.build();
+
+        RecordFilter overflowFilter = new KVOverflowRecordFilter();
+        overflowFilter.init(Collections.emptyMap());
+        RecordFilterChain filter = new RecordFilterChainImpl().addFilter(overflowFilter);
+        settings = new Settings(DEFAULT_CONCURRENCY, getPartitions(DEFAULT_CONCURRENCY), filter);
+        descriptors.forEach(item -> settings.setConcurrency(item.id, item.getMaxThreads()));
+        descriptors.forEach(item -> settings.setPartitions(item.id, getPartitions(item.getMaxThreads())));
     }
 
     protected int getPartitions(int maxThreads) {
