@@ -21,9 +21,16 @@
  */
 package org.nuxeo.ecm.core.event.impl;
 
+import static org.nuxeo.ecm.core.event.async.EventRouterComputation.COMPUTATION_NAME;
+import static org.nuxeo.ecm.core.event.async.EventsStreamListener.EVENT_LOG_NAME;
+import static org.nuxeo.ecm.core.event.async.EventsStreamListener.EVENT_STREAM;
+import static org.nuxeo.lib.stream.computation.AbstractComputation.INPUT_1;
+
 import java.rmi.dgc.VMID;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,13 +57,23 @@ import org.nuxeo.ecm.core.event.EventService;
 import org.nuxeo.ecm.core.event.EventServiceAdmin;
 import org.nuxeo.ecm.core.event.EventStats;
 import org.nuxeo.ecm.core.event.PostCommitEventListener;
-import org.nuxeo.ecm.core.event.ReconnectedEventBundle;
+import org.nuxeo.ecm.core.event.async.EventRouterComputation;
+import org.nuxeo.ecm.core.event.async.EventRouterDescriptor;
+import org.nuxeo.ecm.core.event.async.EventTransformer;
+import org.nuxeo.ecm.core.event.async.EventTransformerDescriptor;
 import org.nuxeo.ecm.core.event.pipe.EventPipeDescriptor;
 import org.nuxeo.ecm.core.event.pipe.EventPipeRegistry;
 import org.nuxeo.ecm.core.event.pipe.dispatch.EventBundleDispatcher;
 import org.nuxeo.ecm.core.event.pipe.dispatch.EventDispatcherDescriptor;
 import org.nuxeo.ecm.core.event.pipe.dispatch.EventDispatcherRegistry;
+import org.nuxeo.lib.stream.codec.NoCodec;
+import org.nuxeo.lib.stream.computation.Settings;
+import org.nuxeo.lib.stream.computation.StreamProcessor;
+import org.nuxeo.lib.stream.computation.Topology;
+import org.nuxeo.lib.stream.computation.log.LogStreamProcessor;
+import org.nuxeo.lib.stream.log.LogManager;
 import org.nuxeo.runtime.api.Framework;
+import org.nuxeo.runtime.stream.StreamService;
 import org.nuxeo.runtime.transaction.TransactionHelper;
 
 /**
@@ -68,12 +85,8 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
 
     private static final Log log = LogFactory.getLog(EventServiceImpl.class);
 
-    protected static final ThreadLocal<CompositeEventBundle> threadBundles = new ThreadLocal<CompositeEventBundle>() {
-        @Override
-        protected CompositeEventBundle initialValue() {
-            return new CompositeEventBundle();
-        }
-    };
+    protected static final ThreadLocal<CompositeEventBundle> threadBundles = ThreadLocal.withInitial(
+            CompositeEventBundle::new);
 
     private static class CompositeEventBundle {
 
@@ -110,6 +123,12 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
     protected EventDispatcherRegistry dispatchers = new EventDispatcherRegistry();
 
     protected EventBundleDispatcher pipeDispatcher;
+
+    protected StreamProcessor streamProcessor;
+
+    protected Map<String, EventTransformer> eventTransformers = new HashMap<>();
+
+    protected Set<String> eventRouters = new HashSet<>();
 
     public EventServiceImpl() {
         listenerDescriptors = new EventListenerList();
@@ -188,6 +207,22 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
                 throw new RuntimeException(e);
             }
         }
+
+        StreamService service = Framework.getService(StreamService.class);
+        LogManager logManager = service.getLogManager(EVENT_LOG_NAME);
+        // when there is no lag between producer and consumer we are done
+        long deadline = System.currentTimeMillis() + timeout;
+        try {
+            while (logManager.getLag(EVENT_STREAM, COMPUTATION_NAME).lag() > 0) {
+                if (System.currentTimeMillis() > deadline) {
+                    throw new RuntimeException("");
+                }
+                Thread.sleep(50);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -206,6 +241,16 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
         log.debug("Registered event dispatcher: " + dispatcherDescriptor.getName());
     }
 
+    /** @since 11.1 */
+    public void addEventTransformer(EventTransformerDescriptor transformerDescriptor) {
+        eventTransformers.computeIfAbsent(transformerDescriptor.getId(), key -> transformerDescriptor.newInstance());
+    }
+
+    /** @since 11.1 */
+    public void addEventRouter(EventRouterDescriptor routerDescriptor) {
+        eventRouters.add(routerDescriptor.getId());
+    }
+
     @Override
     public void removeEventListener(EventListenerDescriptor listener) {
         listenerDescriptors.removeDescriptor(listener);
@@ -220,6 +265,16 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
     public void removeEventDispatcher(EventDispatcherDescriptor dispatcherDescriptor) {
         dispatchers.removeContrib(dispatcherDescriptor);
         log.debug("Unregistered event dispatcher: " + dispatcherDescriptor.getName());
+    }
+
+    /** @since 11.1 */
+    public void removeEventTransformer(EventTransformerDescriptor transformerDescriptor) {
+        eventTransformers.remove(transformerDescriptor.getId());
+    }
+
+    /** @since 11.1 */
+    public void removeEventRouter(EventRouterDescriptor routerDescriptor) {
+        eventRouters.remove(routerDescriptor.getId());
     }
 
     @Override
@@ -519,4 +574,53 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
         }
     }
 
+    @Override
+    public List<EventTransformer> getEventTransformers() {
+        return new ArrayList<>(eventTransformers.values());
+    }
+
+    @Override
+    public List<String> getEventRouters() {
+        return new ArrayList<>(eventRouters);
+    }
+
+    /**
+     * Initializes stream processor for event routers
+     */
+    public void afterStart() {
+        initProcessor();
+        streamProcessor.start();
+    }
+
+    /**
+     * Stops stream processor
+     */
+    public void beforeStop() {
+        if (streamProcessor != null) {
+            streamProcessor.stop(Duration.ofSeconds(1));
+        }
+    }
+
+    protected void initProcessor() {
+        StreamService service = Framework.getService(StreamService.class);
+        streamProcessor = new LogStreamProcessor(service.getLogManager(EVENT_LOG_NAME));
+
+        Settings settings = new Settings(1, 1, NoCodec.NO_CODEC);
+        streamProcessor.init(getTopology(), settings);
+    }
+
+    protected Topology getTopology() {
+        List<String> mapping = new ArrayList<>();
+        mapping.add(INPUT_1 + ":" + EVENT_STREAM);
+        int i = 1;
+        for (String router : eventRouters) {
+            mapping.add(String.format("o%s:%s", i, router));
+            i++;
+        }
+        return Topology.builder()
+                       .addComputation( //
+                               () -> new EventRouterComputation(COMPUTATION_NAME, 1, eventRouters.size() + 1), //
+                               mapping)
+                       .build();
+    }
 }

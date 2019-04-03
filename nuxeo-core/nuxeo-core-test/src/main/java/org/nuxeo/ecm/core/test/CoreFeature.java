@@ -45,6 +45,7 @@ import org.nuxeo.ecm.core.api.PathRef;
 import org.nuxeo.ecm.core.api.impl.UserPrincipal;
 import org.nuxeo.ecm.core.api.security.ACP;
 import org.nuxeo.ecm.core.bulk.CoreBulkFeature;
+import org.nuxeo.ecm.core.event.EventFeature;
 import org.nuxeo.ecm.core.query.QueryParseException;
 import org.nuxeo.ecm.core.query.sql.NXQL;
 import org.nuxeo.ecm.core.repository.RepositoryService;
@@ -107,7 +108,8 @@ import com.google.inject.Binder;
         TransactionalFeature.class,
         RuntimeStreamFeature.class,
         WorkManagerFeature.class,
-        CoreBulkFeature.class })
+        CoreBulkFeature.class,
+        EventFeature.class })
 public class CoreFeature implements RunnerFeature {
 
     protected ACP rootAcp;

@@ -21,6 +21,7 @@ package org.nuxeo.ecm.core.event;
 
 import java.util.List;
 
+import org.nuxeo.ecm.core.event.async.EventTransformer;
 import org.nuxeo.ecm.core.event.impl.EventListenerDescriptor;
 
 /**
@@ -135,5 +136,19 @@ public interface EventService extends EventProducer {
      * @param timeout the maximum time to wait for, in milliseconds
      */
     void waitForAsyncCompletion(long timeout);
+
+    /**
+     * Returns the list of event transformers used by async processing.
+     *
+     * @since 11.1
+     */
+    List<EventTransformer> getEventTransformers();
+
+    /**
+     * Returns the list of event transformers used by async processing.
+     *
+     * @since 11.1
+     */
+    List<String> getEventRouters();
 
 }

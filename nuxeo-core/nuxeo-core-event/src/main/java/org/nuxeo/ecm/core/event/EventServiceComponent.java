@@ -19,6 +19,8 @@
  */
 package org.nuxeo.ecm.core.event;
 
+import org.nuxeo.ecm.core.event.async.EventRouterDescriptor;
+import org.nuxeo.ecm.core.event.async.EventTransformerDescriptor;
 import org.nuxeo.ecm.core.event.impl.EventListenerDescriptor;
 import org.nuxeo.ecm.core.event.impl.EventServiceImpl;
 import org.nuxeo.ecm.core.event.pipe.EventPipeDescriptor;
@@ -26,6 +28,7 @@ import org.nuxeo.ecm.core.event.pipe.dispatch.EventDispatcherDescriptor;
 import org.nuxeo.runtime.api.Framework;
 import org.nuxeo.runtime.model.ComponentContext;
 import org.nuxeo.runtime.model.ComponentInstance;
+import org.nuxeo.runtime.model.ComponentManager;
 import org.nuxeo.runtime.model.DefaultComponent;
 
 /**
@@ -42,6 +45,12 @@ public class EventServiceComponent extends DefaultComponent {
 
     public static final String EVENT_DISPATCHER_XP = "dispatcher";
 
+    /** @since 11.1 */
+    public static final String EVENT_TRANSFORMER_XP = "transformer";
+
+    /** @since 11.1 */
+    public static final String EVENT_ROUTER_XP = "router";
+
     public static final long DEFAULT_SHUTDOWN_TIMEOUT = 5 * 1000; // 5 seconds
 
     protected EventServiceImpl service;
@@ -54,6 +63,25 @@ public class EventServiceComponent extends DefaultComponent {
     @Override
     public void applicationStarted(ComponentContext context) {
         service.init();
+        new ComponentListener().install();
+    }
+
+    protected class ComponentListener implements ComponentManager.Listener {
+
+        @Override
+        public void afterStart(ComponentManager mgr, boolean isResume) {
+            // this is called once all components are started and ready
+            service.afterStart();
+        }
+
+        @Override
+        public void beforeStop(ComponentManager mgr, boolean isStandby) {
+            // this is called before components are stopped
+            if (service != null) {
+                service.beforeStop();
+            }
+            Framework.getRuntime().getComponentManager().removeListener(this);
+        }
     }
 
     @Override
@@ -94,6 +122,12 @@ public class EventServiceComponent extends DefaultComponent {
         } else if (EVENT_DISPATCHER_XP.equals(extensionPoint)) {
             EventDispatcherDescriptor descriptor = (EventDispatcherDescriptor) contribution;
             service.addEventDispatcher(descriptor);
+        } else if (EVENT_TRANSFORMER_XP.equals(extensionPoint)) {
+            EventTransformerDescriptor descriptor = (EventTransformerDescriptor) contribution;
+            service.addEventTransformer(descriptor);
+        } else if (EVENT_ROUTER_XP.equals(extensionPoint)) {
+            EventRouterDescriptor descriptor = (EventRouterDescriptor) contribution;
+            service.addEventRouter(descriptor);
         }
     }
 
@@ -107,6 +141,12 @@ public class EventServiceComponent extends DefaultComponent {
         } else if (EVENT_DISPATCHER_XP.equals(extensionPoint)) {
             EventDispatcherDescriptor descriptor = (EventDispatcherDescriptor) contribution;
             service.removeEventDispatcher(descriptor);
+        } else if (EVENT_TRANSFORMER_XP.equals(extensionPoint)) {
+            EventTransformerDescriptor descriptor = (EventTransformerDescriptor) contribution;
+            service.removeEventTransformer(descriptor);
+        } else if (EVENT_ROUTER_XP.equals(extensionPoint)) {
+            EventRouterDescriptor descriptor = (EventRouterDescriptor) contribution;
+            service.removeEventRouter(descriptor);
         }
     }
 
