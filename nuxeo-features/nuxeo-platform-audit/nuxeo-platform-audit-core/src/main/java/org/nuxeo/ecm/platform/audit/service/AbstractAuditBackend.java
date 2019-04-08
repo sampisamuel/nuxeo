@@ -18,6 +18,8 @@
  */
 package org.nuxeo.ecm.platform.audit.service;
 
+import static org.nuxeo.ecm.core.api.LifeCycleConstants.TRANSTION_EVENT_OPTION_TO;
+import static org.nuxeo.ecm.core.event.async.EventsStreamListener.EVENT_LOG_NAME;
 import static org.nuxeo.ecm.core.schema.FacetNames.SYSTEM_DOCUMENT;
 import static org.nuxeo.ecm.platform.audit.api.BuiltinLogEntryData.LOG_CATEGORY;
 import static org.nuxeo.ecm.platform.audit.api.BuiltinLogEntryData.LOG_DOC_PATH;
@@ -27,9 +29,9 @@ import static org.nuxeo.ecm.platform.audit.api.BuiltinLogEntryData.LOG_EVENT_ID;
 import static org.nuxeo.ecm.platform.audit.api.BuiltinLogEntryData.LOG_ID;
 import static org.nuxeo.ecm.platform.audit.api.BuiltinLogEntryData.LOG_REPOSITORY_ID;
 import static org.nuxeo.ecm.platform.audit.impl.StreamAuditWriter.COMPUTATION_NAME;
-import static org.nuxeo.ecm.platform.audit.listener.StreamAuditEventListener.DEFAULT_LOG_CONFIG;
 import static org.nuxeo.ecm.platform.audit.listener.StreamAuditEventListener.STREAM_AUDIT_ENABLED_PROP;
 import static org.nuxeo.ecm.platform.audit.listener.StreamAuditEventListener.STREAM_NAME;
+import static org.nuxeo.ecm.platform.audit.service.NXAuditEventsService.DISABLE_AUDIT_LOGGER;
 
 import java.io.Serializable;
 import java.security.Principal;
@@ -255,7 +257,7 @@ public abstract class AbstractAuditBackend implements AuditBackend, AuditStorage
                 return null;
             }
 
-            Boolean disabled = (Boolean) docCtx.getProperty(NXAuditEventsService.DISABLE_AUDIT_LOGGER);
+            Boolean disabled = (Boolean) docCtx.getProperty(DISABLE_AUDIT_LOGGER);
             if (disabled != null && disabled.booleanValue()) {
                 // don't log events with this flag
                 return null;
@@ -281,7 +283,7 @@ public abstract class AbstractAuditBackend implements AuditBackend, AuditStorage
                 }
             }
             if (LifeCycleConstants.TRANSITION_EVENT.equals(eventName)) {
-                entry.setDocLifeCycle((String) docCtx.getProperty(LifeCycleConstants.TRANSTION_EVENT_OPTION_TO));
+                entry.setDocLifeCycle((String) docCtx.getProperty(TRANSTION_EVENT_OPTION_TO));
             }
             String category = (String) properties.get("category");
             if (category != null) {
@@ -402,7 +404,7 @@ public abstract class AbstractAuditBackend implements AuditBackend, AuditStorage
             return component.bulker.await(time, unit);
         } else {
             StreamService service = Framework.getService(StreamService.class);
-            LogManager logManager = service.getLogManager(DEFAULT_LOG_CONFIG);
+            LogManager logManager = service.getLogManager(EVENT_LOG_NAME);
             // when there is no lag between producer and consumer we are done
             long deadline = System.currentTimeMillis() + unit.toMillis(time);
             while (logManager.getLag(STREAM_NAME, COMPUTATION_NAME).lag() > 0) {
