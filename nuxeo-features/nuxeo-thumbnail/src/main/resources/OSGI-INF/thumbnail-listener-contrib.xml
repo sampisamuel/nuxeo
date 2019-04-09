@@ -3,18 +3,36 @@
   <extension target="org.nuxeo.ecm.core.event.EventServiceComponent"
     point="listener">
 
-    <listener name="updateThumbListener" async="true"
-      postCommit="true"
-      class="org.nuxeo.ecm.platform.thumbnail.listener.UpdateThumbnailListener"
-      priority="999">
-      <event>scheduleThumbnailUpdate</event>
-    </listener>
+    <!--<listener name="updateThumbListener" async="true"-->
+      <!--postCommit="true"-->
+      <!--class="org.nuxeo.ecm.platform.thumbnail.listener.UpdateThumbnailListener"-->
+      <!--priority="999">-->
+      <!--<event>scheduleThumbnailUpdate</event>-->
+    <!--</listener>-->
+
     <listener name="checkBlobUpdate" async="false" postCommit="false"
       class="org.nuxeo.ecm.platform.thumbnail.listener.CheckBlobUpdateListener"
       priority="999">
       <event>documentCreated</event>
       <event>beforeDocumentModification</event>
     </listener>
+  </extension>
+
+  <extension target="org.nuxeo.ecm.core.event.EventServiceComponent" point="transformer">
+    <eventTransformer id="updateThumbnailEventTransformer"
+      class="org.nuxeo.ecm.platform.thumbnail.transformer.UpdateThumbnailEventTransformer"/>
+  </extension>
+
+  <extension target="org.nuxeo.ecm.core.event.EventServiceComponent" point="router">
+    <eventRouter stream="updateThumbnail"/>
+  </extension>
+
+  <extension target="org.nuxeo.runtime.stream.service" point="streamProcessor">
+    <streamProcessor name="updateThumbnail" logConfig="event"
+      defaultConcurrency="2" defaultPartitions="2"
+      class="org.nuxeo.ecm.platform.thumbnail.processor.UpdateThumbnailProcessor">
+      <policy name="updateThumbnail" maxRetries="3" delay="1s" continueOnFailure="true" />
+    </streamProcessor>
   </extension>
 
 </component>

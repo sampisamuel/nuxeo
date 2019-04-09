@@ -212,8 +212,15 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
         LogManager logManager = service.getLogManager(EVENT_LOG_NAME);
         // when there is no lag between producer and consumer we are done
         long deadline = System.currentTimeMillis() + timeout;
+        waitForAsyncCompletion(logManager, EVENT_STREAM, COMPUTATION_NAME, deadline);
+        // TODO : add this check for all event tasks
+        waitForAsyncCompletion(logManager, "updateThumbnail", "UpdateThumbnail", deadline);
+    }
+
+    protected void waitForAsyncCompletion(LogManager logManager, String streamName, String computationName,
+            long deadline) {
         try {
-            while (logManager.getLag(EVENT_STREAM, COMPUTATION_NAME).lag() > 0) {
+            while (logManager.getLag(streamName, computationName).lag() > 0) {
                 if (System.currentTimeMillis() > deadline) {
                     throw new RuntimeException("");
                 }
