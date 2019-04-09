@@ -105,6 +105,11 @@ public class StreamAuditWriter implements StreamProcessorTopology {
                     EventRecord eventRecord = Framework.getService(CodecService.class)
                                                        .getCodec(DEFAULT_CODEC, EventRecord.class)
                                                        .decode(record.getData());
+                    if (!Framework.getService(AuditLogger.class)
+                                  .getAuditableEventNames()
+                                  .contains(eventRecord.getName())) {
+                        continue; // TODO : add an event filter (same as event transformer) at routing ?
+                    }
                     logEntries.add(getLogEntryFromEventRecord(eventRecord));
                 } catch (NuxeoException | IOException e) {
                     log.error("Discard invalid record: " + record, e);
