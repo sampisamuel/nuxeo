@@ -21,6 +21,7 @@
 
 package org.nuxeo.ecm.platform.audit;
 
+import org.junit.Ignore;
 import org.junit.runner.RunWith;
 import org.nuxeo.ecm.core.test.annotations.Granularity;
 import org.nuxeo.ecm.core.test.annotations.RepositoryConfig;
@@ -31,6 +32,7 @@ import org.nuxeo.runtime.test.runner.FeaturesRunner;
 @RunWith(FeaturesRunner.class)
 @Features(AuditBulkerFeature.class)
 @RepositoryConfig(init = MyInit.class, cleanup = Granularity.METHOD)
+@Ignore
 public class TestNXAuditBulkerEventsService extends TestNXAuditEventsService {
 
     @Override

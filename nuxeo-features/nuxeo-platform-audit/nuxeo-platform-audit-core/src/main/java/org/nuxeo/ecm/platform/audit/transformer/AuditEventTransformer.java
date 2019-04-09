@@ -54,7 +54,6 @@ import org.nuxeo.ecm.platform.audit.service.extension.ExtendedInfoDescriptor;
 import org.nuxeo.ecm.platform.el.ExpressionContext;
 import org.nuxeo.ecm.platform.el.ExpressionEvaluator;
 import org.nuxeo.runtime.api.Framework;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 
@@ -70,6 +69,8 @@ public class AuditEventTransformer implements EventTransformer {
     public static final String EVENT_CONTEXT_COMMENT = "comment";
 
     public static final String EVENT_CONTEXT_DELETED_DOCUMENT = "deletedDocument";
+
+    public static final String EVENT_CONTEXT_EXTENDED_INFOS = "extendedInfos";
 
     protected ObjectMapper objectMapper;
 
@@ -144,6 +145,7 @@ public class AuditEventTransformer implements EventTransformer {
         }
         ExpressionContext context = getExpressionContext(eventContext, auditService);
 
+        Map<String, ExtendedInfo> extendedInfos = new HashMap<>();
         for (ExtendedInfoDescriptor desc : descriptors) {
             String exp = desc.getExpression();
             Serializable value;
@@ -161,9 +163,11 @@ public class AuditEventTransformer implements EventTransformer {
                 continue;
             }
             ExtendedInfo extendedInfo = auditService.getBackend().newExtendedInfo(value);
-            String extendedInfoValue = objectMapper.writeValueAsString(extendedInfo);
-            extendedInfoValue = objectMapper.readTree(extendedInfoValue).textValue();
-            contextMap.put(desc.getKey(), extendedInfoValue);
+            extendedInfos.put(desc.getKey(), extendedInfo);
+        }
+        if (!extendedInfos.isEmpty()) {
+            String extendedInfoValue = objectMapper.writeValueAsString(extendedInfos);
+            contextMap.put(EVENT_CONTEXT_EXTENDED_INFOS, extendedInfoValue);
         }
     }
 

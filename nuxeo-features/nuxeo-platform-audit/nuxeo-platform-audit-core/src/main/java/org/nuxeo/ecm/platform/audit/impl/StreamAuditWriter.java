@@ -18,7 +18,6 @@
  */
 package org.nuxeo.ecm.platform.audit.impl;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.ofNullable;
 import static org.nuxeo.ecm.core.api.LifeCycleConstants.TRANSTION_EVENT_OPTION_TO;
 import static org.nuxeo.ecm.core.event.async.EventTransformer.EVENT_CONTEXT_DOCUMENT_FACETS;
@@ -34,10 +33,10 @@ import static org.nuxeo.ecm.platform.audit.service.NXAuditEventsService.DISABLE_
 import static org.nuxeo.ecm.platform.audit.transformer.AuditEventTransformer.EVENT_CONTEXT_CATEGORY;
 import static org.nuxeo.ecm.platform.audit.transformer.AuditEventTransformer.EVENT_CONTEXT_COMMENT;
 import static org.nuxeo.ecm.platform.audit.transformer.AuditEventTransformer.EVENT_CONTEXT_DELETED_DOCUMENT;
+import static org.nuxeo.ecm.platform.audit.transformer.AuditEventTransformer.EVENT_CONTEXT_EXTENDED_INFOS;
 import static org.nuxeo.runtime.stream.StreamServiceImpl.DEFAULT_CODEC;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -55,8 +54,6 @@ import org.nuxeo.ecm.platform.audit.api.AuditLogger;
 import org.nuxeo.ecm.platform.audit.api.ExtendedInfo;
 import org.nuxeo.ecm.platform.audit.api.LogEntry;
 import org.nuxeo.ecm.platform.audit.io.ExtendedInfoDeserializer;
-import org.nuxeo.ecm.platform.audit.service.NXAuditEventsService;
-import org.nuxeo.ecm.platform.audit.service.extension.ExtendedInfoDescriptor;
 import org.nuxeo.lib.stream.computation.AbstractBatchComputation;
 import org.nuxeo.lib.stream.computation.ComputationContext;
 import org.nuxeo.lib.stream.computation.Record;
@@ -65,6 +62,7 @@ import org.nuxeo.runtime.api.Framework;
 import org.nuxeo.runtime.codec.CodecService;
 import org.nuxeo.runtime.stream.StreamProcessorTopology;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 
@@ -104,12 +102,11 @@ public class StreamAuditWriter implements StreamProcessorTopology {
             List<LogEntry> logEntries = new ArrayList<>(records.size());
             for (Record record : records) {
                 try {
-                    // logEntries.add(getLogEntryFromJson(record.getData()));
                     EventRecord eventRecord = Framework.getService(CodecService.class)
                                                        .getCodec(DEFAULT_CODEC, EventRecord.class)
                                                        .decode(record.getData());
                     logEntries.add(getLogEntryFromEventRecord(eventRecord));
-                } catch (NuxeoException e) {
+                } catch (NuxeoException | IOException e) {
                     log.error("Discard invalid record: " + record, e);
                 }
             }
@@ -132,7 +129,7 @@ public class StreamAuditWriter implements StreamProcessorTopology {
             logger.addLogEntries(logEntries);
         }
 
-        protected LogEntry getLogEntryFromEventRecord(EventRecord eventRecord) {
+        protected LogEntry getLogEntryFromEventRecord(EventRecord eventRecord) throws IOException {
             LogEntry entry = new LogEntryImpl();
             entry.setEventId(eventRecord.getName());
             Date eventDate = new Date(eventRecord.getTime());
@@ -176,27 +173,14 @@ public class StreamAuditWriter implements StreamProcessorTopology {
                 }
                 entry.setCategory(category);
             }
-            Map<String, ExtendedInfo> extendedInfos = new HashMap<>();
 
-            NXAuditEventsService auditService = (NXAuditEventsService) Framework.getRuntime()
-                                                                                .getComponent(NXAuditEventsService.NAME);
-            Set<ExtendedInfoDescriptor> descriptors = auditService.getExtendedInfoDescriptors();
-            List<ExtendedInfoDescriptor> eventDescriptors = auditService.getEventExtendedInfoDescriptors()
-                                                                        .get(eventRecord.getName());
-            if (eventDescriptors != null && !eventDescriptors.isEmpty()) {
-                descriptors.addAll(eventDescriptors);
+            String extendedInfosJson = eventRecord.getContext().get(EVENT_CONTEXT_EXTENDED_INFOS);
+            if (extendedInfosJson != null) {
+                TypeReference<HashMap<String, ExtendedInfo>> typeRef = new TypeReference<>() {
+                };
+                Map<String, ExtendedInfo> extendedInfos = objectMapper.readValue(extendedInfosJson, typeRef);
+                entry.setExtendedInfos(extendedInfos);
             }
-
-            for (ExtendedInfoDescriptor desc : descriptors) {
-                String key = desc.getKey();
-                String value = eventContext.get(key);
-                if (value != null) {
-                    ExtendedInfo info = objectMapper.convertValue(value, ExtendedInfo.class);
-                    extendedInfos.put(key, info);
-                }
-            }
-            entry.setExtendedInfos(extendedInfos);
-
             return entry;
         }
     }
