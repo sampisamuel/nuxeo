@@ -42,6 +42,7 @@ import org.nuxeo.ecm.core.test.annotations.Granularity;
 import org.nuxeo.ecm.core.test.annotations.RepositoryConfig;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 
 import com.google.inject.Inject;
 
@@ -55,6 +56,9 @@ public class TestACEStatusUpdate {
 
     @Inject
     protected CoreSession session;
+
+    @Inject
+    protected TransactionalFeature transactionalFeature;
 
     @Inject
     protected EventService eventService;
@@ -107,7 +111,7 @@ public class TestACEStatusUpdate {
 
     protected void fireUpdateACEStatusEventAndWait() {
         eventService.fireEvent(UpdateACEStatusListener.UPDATE_ACE_STATUS_EVENT, new EventContextImpl());
-        eventService.waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
     }
 
     @Test

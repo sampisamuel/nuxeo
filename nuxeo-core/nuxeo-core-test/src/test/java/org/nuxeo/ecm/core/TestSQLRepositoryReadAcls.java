@@ -46,6 +46,7 @@ import org.nuxeo.ecm.core.test.annotations.Granularity;
 import org.nuxeo.ecm.core.test.annotations.RepositoryConfig;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 import org.nuxeo.runtime.transaction.TransactionHelper;
 
 /**
@@ -60,7 +61,7 @@ public class TestSQLRepositoryReadAcls {
     protected CoreFeature coreFeature;
 
     @Inject
-    protected EventService eventService;
+    protected TransactionalFeature transactionalFeature;
 
     @Inject
     protected CoreSession session;
@@ -71,15 +72,7 @@ public class TestSQLRepositoryReadAcls {
     }
 
     protected void waitForAsyncCompletion() {
-        nextTransaction();
-        eventService.waitForAsyncCompletion();
-    }
-
-    protected void nextTransaction() {
-        if (TransactionHelper.isTransactionActiveOrMarkedRollback()) {
-            TransactionHelper.commitOrRollbackTransaction();
-            TransactionHelper.startTransaction();
-        }
+        transactionalFeature.nextTransaction();
     }
 
     @Test

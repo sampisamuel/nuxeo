@@ -66,6 +66,9 @@ public class TestPermissionGrantedNotification {
     protected CoreSession session;
 
     @Inject
+    protected TransactionalFeature transactionalFeature;
+
+    @Inject
     protected EventService eventService;
 
     @Before
@@ -87,10 +90,8 @@ public class TestPermissionGrantedNotification {
         acp.addACE(ACL.LOCAL_ACL, fryACE);
         doc.setACP(acp, true);
 
-        TransactionHelper.commitOrRollbackTransaction();
-        eventService.waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
         assertEquals(0, DummyPermissionGrantedNotificationListener.processedACEs.size());
-        TransactionHelper.startTransaction();
 
         Map<String, Serializable> contextData = new HashMap<>();
         contextData.put(Constants.NOTIFY_KEY, true);
@@ -99,10 +100,7 @@ public class TestPermissionGrantedNotification {
         acp.addACE(ACL.LOCAL_ACL, leelaACE);
         doc.setACP(acp, true);
 
-        TransactionHelper.commitOrRollbackTransaction();
-        eventService.waitForAsyncCompletion();
-        TransactionHelper.startTransaction();
-
+        transactionalFeature.nextTransaction();
         assertEquals(1, DummyPermissionGrantedNotificationListener.processedACEs.size());
     }
 
@@ -124,9 +122,7 @@ public class TestPermissionGrantedNotification {
         acp.addACE(ACL.LOCAL_ACL, benderACE);
         doc.setACP(acp, true);
 
-        TransactionHelper.commitOrRollbackTransaction();
-        eventService.waitForAsyncCompletion();
-        TransactionHelper.startTransaction();
+        transactionalFeature.nextTransaction();
         // leela ACE which is permanent
         assertEquals(1, DummyPermissionGrantedNotificationListener.processedACEs.size());
         assertEquals("leela", DummyPermissionGrantedNotificationListener.processedACEs.get(0).getUsername());
@@ -134,7 +130,8 @@ public class TestPermissionGrantedNotification {
         Thread.sleep(10000);
 
         eventService.fireEvent(UpdateACEStatusListener.UPDATE_ACE_STATUS_EVENT, new EventContextImpl());
-        eventService.waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
+
         DummyPermissionGrantedNotificationListener.processedACEs.sort((o1, o2) -> o1.getUsername().compareTo(
                 o2.getUsername()));
         assertEquals(3, DummyPermissionGrantedNotificationListener.processedACEs.size());

@@ -173,8 +173,7 @@ public class TestSQLRepositoryAPI {
     }
 
     protected void waitForAsyncCompletion() {
-        nextTransaction();
-        eventService.waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
     }
 
     protected void nextTransaction() {

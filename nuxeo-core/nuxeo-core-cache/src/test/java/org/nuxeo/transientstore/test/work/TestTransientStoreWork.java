@@ -34,10 +34,12 @@ import org.nuxeo.ecm.core.event.EventService;
 import org.nuxeo.ecm.core.transientstore.api.TransientStoreService;
 import org.nuxeo.ecm.core.transientstore.work.TransientStoreWork;
 import org.nuxeo.ecm.core.work.api.WorkManager;
+import org.nuxeo.runtime.stream.RuntimeStreamFeature;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
 import org.nuxeo.runtime.test.runner.RuntimeFeature;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 import org.nuxeo.transientstore.test.InMemoryTransientStoreFeature;
 
 import com.google.inject.Inject;
@@ -46,9 +48,12 @@ import com.google.inject.Inject;
  * @since 7.4
  */
 @RunWith(FeaturesRunner.class)
-@Features({ RuntimeFeature.class, InMemoryTransientStoreFeature.class })
+@Features({ RuntimeFeature.class, RuntimeStreamFeature.class, InMemoryTransientStoreFeature.class })
 @Deploy("org.nuxeo.ecm.core.event")
 public class TestTransientStoreWork {
+
+    @Inject
+    protected TransactionalFeature transactionalFeature;
 
     @Inject
     protected EventService eventService;
@@ -64,7 +69,7 @@ public class TestTransientStoreWork {
         TransientStoreWork work = new DummyTransientStoreWork();
         workManager.schedule(work);
 
-        eventService.waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
 
         BlobHolder holder = TransientStoreWork.getBlobHolder(work.getEntryKey());
         assertNotNull(holder);

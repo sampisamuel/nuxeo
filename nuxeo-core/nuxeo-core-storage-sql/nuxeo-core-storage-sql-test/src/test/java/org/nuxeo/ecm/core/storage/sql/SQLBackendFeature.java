@@ -24,6 +24,7 @@ import java.sql.SQLException;
 
 import org.nuxeo.ecm.core.repository.RepositoryService;
 import org.nuxeo.runtime.api.Framework;
+import org.nuxeo.runtime.stream.RuntimeStreamFeature;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
@@ -39,7 +40,7 @@ import org.osgi.framework.Bundle;
  * @since 10.1
  */
 @TransactionalConfig(autoStart = false)
-@Features(TransactionalFeature.class)
+@Features({ TransactionalFeature.class, RuntimeStreamFeature.class })
 @Deploy("org.nuxeo.runtime.cluster")
 @Deploy("org.nuxeo.runtime.pubsub")
 @Deploy("org.nuxeo.runtime.kv")

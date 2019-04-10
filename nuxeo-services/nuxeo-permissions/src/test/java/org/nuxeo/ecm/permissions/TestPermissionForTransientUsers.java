@@ -125,18 +125,15 @@ public class TestPermissionForTransientUsers {
         acp.addACE(ACL.LOCAL_ACL, leelaACE);
         doc.setACP(acp, true);
 
-        TransactionHelper.commitOrRollbackTransaction();
-        eventService.waitForAsyncCompletion();
-        TransactionHelper.startTransaction();
+        transactionalFeature.nextTransaction();
+
         String token = TransientUserPermissionHelper.getToken(transientUsername);
         assertNotNull(token);
 
         Thread.sleep(10000);
 
-        TransactionHelper.commitOrRollbackTransaction();
         eventService.fireEvent(UpdateACEStatusListener.UPDATE_ACE_STATUS_EVENT, new EventContextImpl());
-        eventService.waitForAsyncCompletion();
-        TransactionHelper.startTransaction();
+        transactionalFeature.nextTransaction();
 
         token = TransientUserPermissionHelper.getToken(transientUsername);
         assertNull(token);

@@ -50,6 +50,7 @@ import org.nuxeo.ecm.core.test.annotations.RepositoryConfig;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 import org.nuxeo.runtime.transaction.TransactionHelper;
 import org.nuxeo.runtime.transaction.TransactionRuntimeException;
 
@@ -74,11 +75,13 @@ public class TestSQLRepositoryJTAJCA {
     protected EventService eventService;
 
     @Inject
+    protected TransactionalFeature transactionalFeature;
+
+    @Inject
     protected CoreSession session;
 
     protected void waitForAsyncCompletion() {
-        nextTransaction();
-        eventService.waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
     }
 
     protected void nextTransaction() {

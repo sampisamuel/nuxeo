@@ -46,6 +46,7 @@ import org.nuxeo.runtime.api.Framework;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 import org.nuxeo.runtime.transaction.TransactionHelper;
 
 @RunWith(FeaturesRunner.class)
@@ -62,6 +63,8 @@ public class SimpleListenerTest {
     @Inject
     protected CommentManager commentManager;
 
+    @Inject
+    protected TransactionalFeature transactionalFeature;
 
     protected DocumentModel doCreateADocWithComments() throws Exception {
 
@@ -93,10 +96,6 @@ public class SimpleListenerTest {
         return doc;
     }
 
-    protected void waitForAsyncExec() {
-        Framework.getService(EventService.class).waitForAsyncCompletion();
-    }
-
     @Test
     public void testDocumentRemovedCommentEventListener() throws Exception {
         DocumentModel doc = doCreateADocWithComments();
@@ -109,12 +108,7 @@ public class SimpleListenerTest {
         session.removeDocument(doc.getRef());
         session.save();
 
-        // wait for the listener to be called
-        if (TransactionHelper.isTransactionActiveOrMarkedRollback()) {
-            TransactionHelper.commitOrRollbackTransaction();
-            TransactionHelper.startTransaction();
-        }
-        waitForAsyncExec();
+        transactionalFeature.nextTransaction();
 
         // Did all the comments have been deleted?
         comments = commentManager.getComments(session, doc.getId());

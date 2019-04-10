@@ -105,7 +105,8 @@ public class StreamAuditWriter implements StreamProcessorTopology {
                     EventRecord eventRecord = Framework.getService(CodecService.class)
                                                        .getCodec(DEFAULT_CODEC, EventRecord.class)
                                                        .decode(record.getData());
-                    logEntries.add(getLogEntryFromEventRecord(eventRecord));
+                    LogEntry logEntry = getLogEntryFromEventRecord(eventRecord);
+                    ofNullable(logEntry).ifPresent(logEntries::add);
                 } catch (NuxeoException | IOException e) {
                     log.error("Discard invalid record: " + record, e);
                 }

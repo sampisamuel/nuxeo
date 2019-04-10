@@ -21,13 +21,13 @@ package org.nuxeo.transientstore.test;
 import org.nuxeo.ecm.core.transientstore.TransientStorageComponent;
 import org.nuxeo.ecm.core.transientstore.api.TransientStoreService;
 import org.nuxeo.runtime.api.Framework;
+import org.nuxeo.runtime.stream.RuntimeStreamFeature;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
 import org.nuxeo.runtime.test.runner.RunnerFeature;
-import org.nuxeo.runtime.test.runner.RuntimeFeature;
 
-@Features(RuntimeFeature.class)
+@Features(RuntimeStreamFeature.class)
 @Deploy("org.nuxeo.ecm.core.cache")
 public class TransientStoreFeature implements RunnerFeature {
 

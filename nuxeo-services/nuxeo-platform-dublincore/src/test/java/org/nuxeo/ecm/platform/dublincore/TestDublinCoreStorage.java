@@ -51,7 +51,6 @@ import org.nuxeo.ecm.core.api.security.ACL;
 import org.nuxeo.ecm.core.api.security.ACP;
 import org.nuxeo.ecm.core.api.security.SecurityConstants;
 import org.nuxeo.ecm.core.event.EventProducer;
-import org.nuxeo.ecm.core.event.EventService;
 import org.nuxeo.ecm.core.event.impl.DocumentEventContext;
 import org.nuxeo.ecm.core.test.CoreFeature;
 import org.nuxeo.ecm.core.test.StorageConfiguration;
@@ -61,7 +60,7 @@ import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
 import org.nuxeo.runtime.test.runner.HotDeployer;
-import org.nuxeo.runtime.transaction.TransactionHelper;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 
 /**
  * DublinCoreStorage Test Case.
@@ -74,6 +73,9 @@ public class TestDublinCoreStorage {
 
     @Inject
     protected CoreFeature feature;
+
+    @Inject
+    protected TransactionalFeature transactionalFeature;
 
     @Inject
     protected CoreSession session;
@@ -442,11 +444,7 @@ public class TestDublinCoreStorage {
     }
 
     protected void waitForAsyncCompletion() {
-        if (TransactionHelper.isTransactionActiveOrMarkedRollback()) {
-            TransactionHelper.commitOrRollbackTransaction();
-            TransactionHelper.startTransaction();
-        }
-        Framework.getService(EventService.class).waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
     }
 
 }

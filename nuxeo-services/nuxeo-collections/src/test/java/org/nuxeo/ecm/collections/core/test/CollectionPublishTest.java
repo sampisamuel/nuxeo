@@ -40,6 +40,7 @@ import org.nuxeo.ecm.platform.query.api.PageProviderService;
 import org.nuxeo.ecm.platform.query.nxql.CoreQueryDocumentPageProvider;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 import org.nuxeo.runtime.transaction.TransactionHelper;
 
 @RunWith(FeaturesRunner.class)
@@ -58,7 +59,7 @@ public class CollectionPublishTest {
     PageProviderService pps;
 
     @Inject
-    protected EventService eventService;
+    protected TransactionalFeature transactionalFeature;
 
     @Test
     public void addToFavoritesAndPublish() throws Exception {
@@ -70,7 +71,7 @@ public class CollectionPublishTest {
         favoritesManager.addToFavorites(testFile, session);
         assertTrue(favoritesManager.isFavorite(testFile, session));
 
-        waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
         Map<String, Serializable> props = new HashMap<String, Serializable>();
         props.put(CoreQueryDocumentPageProvider.CORE_SESSION_PROPERTY, (Serializable) session);
         DocumentModel favoritesDoc = favoritesManager.getFavorites(session);
@@ -84,18 +85,10 @@ public class CollectionPublishTest {
         sectionDoc.setPathInfo(sectionDoc.getPathAsString(), "section1");
         sectionDoc = session.createDocument(sectionDoc);
         session.publishDocument(testFile, sectionDoc);
-        waitForAsyncCompletion();
+        transactionalFeature.nextTransaction();
         favoritesDoc = favoritesManager.getFavorites(session);
         list = favoritesDoc.getAdapter(Collection.class).getCollectedDocumentIds();
         assertEquals(1, list.size());
-    }
-
-    protected void waitForAsyncCompletion() {
-        if (TransactionHelper.isTransactionActiveOrMarkedRollback()) {
-            TransactionHelper.commitOrRollbackTransaction();
-            TransactionHelper.startTransaction();
-        }
-        eventService.waitForAsyncCompletion();
     }
 
 }

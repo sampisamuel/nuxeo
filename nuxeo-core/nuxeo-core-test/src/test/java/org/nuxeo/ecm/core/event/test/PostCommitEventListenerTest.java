@@ -38,7 +38,7 @@ import org.nuxeo.runtime.test.runner.ConditionalIgnoreRule;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
-import org.nuxeo.runtime.transaction.TransactionHelper;
+import org.nuxeo.runtime.test.runner.TransactionalFeature;
 
 /**
  * PostCommitEventListenerTest test ScriptingPostCommitEventListener
@@ -54,7 +54,7 @@ public class PostCommitEventListenerTest {
     protected CoreSession session;
 
     @Inject
-    protected EventService eventService;
+    protected TransactionalFeature transactionalFeature;
 
     /**
      * The script listener will update this counter
@@ -62,9 +62,7 @@ public class PostCommitEventListenerTest {
     public static int SCRIPT_CNT = 0;
 
     protected void nextTransaction() {
-        TransactionHelper.commitOrRollbackTransaction();
-        eventService.waitForAsyncCompletion();
-        TransactionHelper.startTransaction();
+        transactionalFeature.nextTransaction();
     }
 
     @BeforeClass
