@@ -213,8 +213,12 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
         // when there is no lag between producer and consumer we are done
         long deadline = System.currentTimeMillis() + timeout;
         waitForAsyncCompletion(logManager, EVENT_STREAM, COMPUTATION_NAME, deadline);
-        // TODO : add this check for all event tasks
-        waitForAsyncCompletion(logManager, "updateThumbnail", "UpdateThumbnail", deadline);
+        for (String router : eventRouters) {
+            for (String consumerName : logManager.listConsumerGroups(router)) {
+                // TODO : add this check for all event tasks
+                waitForAsyncCompletion(logManager, router, consumerName, deadline);
+            }
+        }
     }
 
     protected void waitForAsyncCompletion(LogManager logManager, String streamName, String computationName,
