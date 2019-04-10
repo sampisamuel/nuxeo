@@ -24,7 +24,8 @@
   </extension>
 
   <extension target="org.nuxeo.ecm.core.event.EventServiceComponent" point="router">
-    <eventRouter stream="updateThumbnail"/>
+    <eventRouter id="updateThumbnailEventRouter" stream="updateThumbnail"
+      class="org.nuxeo.ecm.platform.thumbnail.router.UpdateThumbnailEventRouter"/>
   </extension>
 
   <extension target="org.nuxeo.runtime.stream.service" point="streamProcessor">

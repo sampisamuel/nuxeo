@@ -94,9 +94,6 @@ public class UpdateThumbnailProcessor implements StreamProcessorTopology {
                 EventRecord eventRecord = Framework.getService(CodecService.class)
                                                    .getCodec(DEFAULT_CODEC, EventRecord.class)
                                                    .decode(record.getData());
-                if (!ThumbnailConstants.EventNames.scheduleThumbnailUpdate.name().equals(eventRecord.getName())) {
-                    return; // TODO : add an event filter (same as event transformer) at routing ?
-                }
                 LoginContext loginContext;
                 try {
                     String username = eventRecord.getUsername();

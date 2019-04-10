@@ -166,7 +166,7 @@
   </extension>
 
   <extension target="org.nuxeo.ecm.core.event.EventServiceComponent" point="router">
-    <eventRouter stream="audit"/>
+    <eventRouter id="auditEventRouter" stream="audit" class="org.nuxeo.ecm.platform.audit.router.AuditEventRouter"/>
   </extension>
 
   <extension target="org.nuxeo.runtime.stream.service" point="logConfig">

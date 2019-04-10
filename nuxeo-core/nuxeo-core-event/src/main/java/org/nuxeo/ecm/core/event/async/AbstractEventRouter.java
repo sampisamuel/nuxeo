@@ -19,27 +19,20 @@
 
 package org.nuxeo.ecm.core.event.async;
 
-import org.nuxeo.common.xmap.annotation.XNode;
-import org.nuxeo.common.xmap.annotation.XObject;
-import org.nuxeo.ecm.core.api.NuxeoException;
-import org.nuxeo.runtime.model.Descriptor;
-
 /**
  * @since 11.1
  */
-@XObject("eventRouter")
-public class EventRouterDescriptor implements Descriptor {
+public abstract class AbstractEventRouter implements EventRouter {
 
-    @XNode("@id")
     protected String id;
 
-    @XNode("@stream")
     protected String stream;
 
-    @XNode("@class")
-    protected Class<? extends EventRouter> eventRouterClass;
+    public AbstractEventRouter(String id, String stream) {
+        this.id = id;
+        this.stream = stream;
+    }
 
-    @Override
     public String getId() {
         return id;
     }
@@ -47,13 +40,4 @@ public class EventRouterDescriptor implements Descriptor {
     public String getStream() {
         return stream;
     }
-
-    public EventRouter newInstance() {
-        try {
-            return eventRouterClass.getDeclaredConstructor(String.class, String.class).newInstance(id, stream);
-        } catch (ReflectiveOperationException e) {
-            throw new NuxeoException(e);
-        }
-    }
-
 }

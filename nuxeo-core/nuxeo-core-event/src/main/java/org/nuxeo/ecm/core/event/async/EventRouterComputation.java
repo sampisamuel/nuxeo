@@ -17,6 +17,8 @@
  */
 package org.nuxeo.ecm.core.event.async;
 
+import static org.nuxeo.runtime.stream.StreamServiceImpl.DEFAULT_CODEC;
+
 import java.util.List;
 
 import org.nuxeo.ecm.core.event.EventService;
@@ -24,6 +26,7 @@ import org.nuxeo.lib.stream.computation.AbstractBatchComputation;
 import org.nuxeo.lib.stream.computation.ComputationContext;
 import org.nuxeo.lib.stream.computation.Record;
 import org.nuxeo.runtime.api.Framework;
+import org.nuxeo.runtime.codec.CodecService;
 
 /**
  * Computation acting as a router for event records.
@@ -34,7 +37,7 @@ public class EventRouterComputation extends AbstractBatchComputation {
 
     public static final String COMPUTATION_NAME = "EventRouter";
 
-    protected List<String> eventRouters;
+    protected List<EventRouter> eventRouters;
 
     public EventRouterComputation(String name, int nbInputStreams, int nbOutputStreams) {
         super(name, nbInputStreams, nbOutputStreams);
@@ -49,10 +52,15 @@ public class EventRouterComputation extends AbstractBatchComputation {
     @Override
     protected void batchProcess(ComputationContext context, String inputStreamName, List<Record> records) {
         for (Record record : records) {
-            eventRouters.forEach(router -> {
-                context.produceRecord(router, record);
-                context.askForCheckpoint();
-            });
+            eventRouters.stream()
+                        .filter(router -> router.accept(
+                                Framework.getService(CodecService.class)
+                                         .getCodec(DEFAULT_CODEC, EventRecord.class)
+                                         .decode(record.getData())))
+                        .forEach(router -> {
+                            context.produceRecord(router.getStream(), record);
+                            context.askForCheckpoint();
+                        });
         }
     }
 

@@ -21,6 +21,7 @@ package org.nuxeo.ecm.core.event;
 
 import java.util.List;
 
+import org.nuxeo.ecm.core.event.async.EventRouter;
 import org.nuxeo.ecm.core.event.async.EventTransformer;
 import org.nuxeo.ecm.core.event.impl.EventListenerDescriptor;
 
@@ -149,6 +150,6 @@ public interface EventService extends EventProducer {
      *
      * @since 11.1
      */
-    List<String> getEventRouters();
+    List<EventRouter> getEventRouters();
 
 }

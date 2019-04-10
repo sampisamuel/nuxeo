@@ -30,7 +30,6 @@ import java.rmi.dgc.VMID;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,6 +56,7 @@ import org.nuxeo.ecm.core.event.EventService;
 import org.nuxeo.ecm.core.event.EventServiceAdmin;
 import org.nuxeo.ecm.core.event.EventStats;
 import org.nuxeo.ecm.core.event.PostCommitEventListener;
+import org.nuxeo.ecm.core.event.async.EventRouter;
 import org.nuxeo.ecm.core.event.async.EventRouterComputation;
 import org.nuxeo.ecm.core.event.async.EventRouterDescriptor;
 import org.nuxeo.ecm.core.event.async.EventTransformer;
@@ -128,7 +128,7 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
 
     protected Map<String, EventTransformer> eventTransformers = new HashMap<>();
 
-    protected Set<String> eventRouters = new HashSet<>();
+    protected Map<String, EventRouter> eventRouters = new HashMap<>();
 
     public EventServiceImpl() {
         listenerDescriptors = new EventListenerList();
@@ -213,7 +213,8 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
         // when there is no lag between producer and consumer we are done
         long deadline = System.currentTimeMillis() + timeout;
         waitForAsyncCompletion(logManager, EVENT_STREAM, COMPUTATION_NAME, deadline);
-        for (String router : eventRouters) {
+        Set<String> routers = eventRouters.values().stream().map(EventRouter::getStream).collect(Collectors.toSet());
+        for (String router : routers) {
             for (String consumerName : logManager.listConsumerGroups(router)) {
                 // TODO : add this check for all event tasks
                 waitForAsyncCompletion(logManager, router, consumerName, deadline);
@@ -259,7 +260,7 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
 
     /** @since 11.1 */
     public void addEventRouter(EventRouterDescriptor routerDescriptor) {
-        eventRouters.add(routerDescriptor.getId());
+        eventRouters.computeIfAbsent(routerDescriptor.getId(), key -> routerDescriptor.newInstance());
     }
 
     @Override
@@ -591,8 +592,8 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
     }
 
     @Override
-    public List<String> getEventRouters() {
-        return new ArrayList<>(eventRouters);
+    public List<EventRouter> getEventRouters() {
+        return new ArrayList<>(eventRouters.values());
     }
 
     /**
@@ -624,7 +625,8 @@ public class EventServiceImpl implements EventService, EventServiceAdmin, Synchr
         List<String> mapping = new ArrayList<>();
         mapping.add(INPUT_1 + ":" + EVENT_STREAM);
         int i = 1;
-        for (String router : eventRouters) {
+        Set<String> routers = eventRouters.values().stream().map(EventRouter::getStream).collect(Collectors.toSet());
+        for (String router : routers) {
             mapping.add(String.format("o%s:%s", i, router));
             i++;
         }
