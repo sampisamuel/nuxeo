@@ -1,0 +1,2 @@
+name,type,dc:description,dc:title,dc:contributors,note:note,complexTest:complexItem
+mycomplexfile,ComplexFile,a complex file,My Complex File,joe,,"{\""arrayProp\"":[\""1\""],\""boolProp\"":true,\""stringProp\"":\""testString1\""}"
