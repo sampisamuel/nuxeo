@@ -20,9 +20,7 @@
  */
 package org.nuxeo.ecm.platform.filemanager;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
+import static org.junit.Assert.*;
 
 import java.io.File;
 import java.util.Arrays;
@@ -53,6 +51,8 @@ import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @RunWith(FeaturesRunner.class)
 @Features(CoreFeature.class)
 @RepositoryConfig(init = RepositoryInit.class, cleanup = Granularity.METHOD)
@@ -61,6 +61,9 @@ import org.nuxeo.runtime.test.runner.FeaturesRunner;
 @Deploy("org.nuxeo.ecm.platform.filemanager.core")
 @Deploy("org.nuxeo.ecm.platform.filemanager.core:test-types-contrib.xml")
 public class TestCSVZipImporter {
+
+    protected static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
 
     @Inject
     protected CoreSession coreSession;
@@ -149,22 +152,4 @@ public class TestCSVZipImporter {
         List<String> contributors = Arrays.asList((String[]) doc.getPropertyValue("dc:contributors"));
         assertEquals(4, contributors.size());
     }
-
-    @Test
-    public void testDocumentCreationWithComplexType() throws Exception {
-        File archive = getArchiveFile("test-data/testCSVComplexTypeArchive.zip");
-        FileManager fm = Framework.getService(FileManager.class);
-        Blob blob = Blobs.createBlob(archive);
-        FileImporterContext context = FileImporterContext.builder(coreSession, blob, workspace2.getPathAsString())
-                .overwrite(true)
-                .build();
-        fm.createOrUpdateDocument(context);
-        DocumentModelList children = coreSession.getChildren(workspace2.getRef());
-        assertSame(1, children.size());
-
-        DocumentModel doc = children.get(0);
-        Map<String, Object> resultMap = (Map<String, Object>) doc.getPropertyValue("complexTest:complexItem");
-        assertNotNull(resultMap);
-    }
-
 }

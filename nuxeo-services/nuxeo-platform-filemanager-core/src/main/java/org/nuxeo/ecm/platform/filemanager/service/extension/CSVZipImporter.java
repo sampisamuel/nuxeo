@@ -35,12 +35,9 @@ import java.util.zip.ZipFile;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.nuxeo.common.utils.IdUtils;
 import org.nuxeo.common.utils.Path;
-import org.nuxeo.ecm.automation.core.util.ComplexTypeJSONDecoder;
 import org.nuxeo.ecm.core.api.Blob;
 import org.nuxeo.ecm.core.api.Blobs;
 import org.nuxeo.ecm.core.api.CloseableFile;
@@ -56,7 +53,6 @@ import org.nuxeo.ecm.core.schema.types.primitives.IntegerType;
 import org.nuxeo.ecm.core.schema.types.primitives.LongType;
 import org.nuxeo.ecm.core.schema.types.primitives.StringType;
 import org.nuxeo.ecm.platform.filemanager.api.FileImporterContext;
-import org.nuxeo.runtime.api.Framework;
 
 public class CSVZipImporter extends AbstractFileImporter {
 
@@ -254,15 +250,10 @@ public class CSVZipImporter extends AbstractFileImporter {
                     blob.setFilename(stringValue);
                     fieldValue = (Serializable) blob;
                 }
-            } else {
-                try {
-                    fieldValue = (Serializable) ComplexTypeJSONDecoder.decode((ComplexType) type,
-                        stringValue);
-                    replaceBlobs((Map<String, Object>) fieldValue);
-                } catch (Exception e) {
-                    throw new NuxeoException(e);
-                }
             }
+            /*
+             * TODO: Account for other complex fields
+             */
         } else if (type.isListType()) {
             Type listFieldType = ((ListType) type).getFieldType();
             if (listFieldType.isSimpleType()) {
@@ -270,101 +261,12 @@ public class CSVZipImporter extends AbstractFileImporter {
                  * Array.
                  */
                 fieldValue = stringValue.split("\\|");
-            } else {
-                /*
-                 * TODO:
-                 * Complex list.
-                 */
-                try {
-                    fieldValue = (Serializable) ComplexTypeJSONDecoder.decodeList((ListType) listFieldType, stringValue);
-                    replaceBlobs((List<Object>) fieldValue);
-                } catch (IOException e) {
-                    log.error(e.getStackTrace());
-                }
             }
+            /*
+             * TODO: Complex list.
+             */
         }
 
         return fieldValue;
-    }
-
-    /**
-     * Creates a {@code Blob} from a relative file path. The File will be looked up in the folder registered by the
-     * {@code nuxeo.csv.blobs.folder} property.
-     *
-     * @since 9.3
-     */
-    protected Blob createBlobFromFilePath(String fileRelativePath) throws IOException {
-        String blobsFolderPath = Framework.getProperty(NUXEO_CSV_BLOBS_FOLDER);
-        String path = FilenameUtils.normalize(blobsFolderPath + "/" + fileRelativePath);
-        File file = new File(path);
-        if (file.exists()) {
-            return Blobs.createBlob(file, null, null, FilenameUtils.getName(fileRelativePath));
-        } else {
-            return null;
-        }
-    }
-
-    /**
-     * Creates a {@code Blob} from a {@code StringBlob}. Assume that the {@code StringBlob} content is the relative file
-     * path. The File will be looked up in the folder registered by the {@code nuxeo.csv.blobs.folder} property.
-     *
-     * @since 9.3
-     */
-    protected Blob createBlobFromStringBlob(Blob stringBlob) throws IOException {
-        String fileRelativePath = stringBlob.getString();
-        Blob blob = createBlobFromFilePath(fileRelativePath);
-        if (blob == null) {
-            throw new IOException(String.format("File %s does not exist", fileRelativePath));
-        }
-
-        blob.setMimeType(stringBlob.getMimeType());
-        blob.setEncoding(stringBlob.getEncoding());
-        String filename = stringBlob.getFilename();
-        if (filename != null) {
-            blob.setFilename(filename);
-        }
-        return blob;
-    }
-
-    /**
-     * Recursively replaces all {@code Blob}s with {@code Blob}s created from Files stored in the folder registered by
-     * the {@code nuxeo.csv.blobs.folder} property.
-     *
-     * @since 9.3
-     */
-    @SuppressWarnings("unchecked")
-    protected void replaceBlobs(Map<String, Object> map) throws IOException {
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof Blob) {
-                Blob blob = (Blob) value;
-                entry.setValue(createBlobFromStringBlob(blob));
-            } else if (value instanceof List) {
-                replaceBlobs((List<Object>) value);
-            } else if (value instanceof Map) {
-                replaceBlobs((Map<String, Object>) value);
-            }
-        }
-    }
-
-    /**
-     * Recursively replaces all {@code Blob}s with {@code Blob}s created from Files stored in the folder registered by
-     * the {@code nuxeo.csv.blobs.folder} property.
-     *
-     * @since 9.3
-     */
-    @SuppressWarnings("unchecked")
-    protected void replaceBlobs(List<Object> list) throws IOException {
-        for (ListIterator<Object> it = list.listIterator(); it.hasNext();) {
-            Object value = it.next();
-            if (value instanceof Blob) {
-                Blob blob = (Blob) value;
-                it.set(createBlobFromStringBlob(blob));
-            } else if (value instanceof List) {
-                replaceBlobs((List<Object>) value);
-            } else if (value instanceof Map) {
-                replaceBlobs((Map<String, Object>) value);
-            }
-        }
     }
 }
