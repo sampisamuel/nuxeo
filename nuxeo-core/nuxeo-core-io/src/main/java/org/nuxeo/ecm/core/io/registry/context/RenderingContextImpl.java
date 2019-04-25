@@ -45,6 +45,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.nuxeo.ecm.core.api.CoreInstance;
 import org.nuxeo.ecm.core.api.CoreSession;
 import org.nuxeo.ecm.core.api.DocumentModel;
+import org.nuxeo.ecm.core.io.APIVersion;
 import org.nuxeo.ecm.core.io.registry.MarshallingConstants;
 import org.nuxeo.ecm.core.io.registry.MarshallingException;
 
@@ -329,6 +330,12 @@ public class RenderingContextImpl implements RenderingContext {
             return;
         }
         parameters.computeIfAbsent(realName, key -> new CopyOnWriteArrayList<>()).addAll(values);
+    }
+
+    @Override
+    public APIVersion getAPIVersion() {
+        APIVersion apiVersion = getParameter(APIVersion.API_VERSION_ATTRIBUTE_NAME);
+        return apiVersion != null ? apiVersion : APIVersion.last();
     }
 
     static RenderingContextBuilder builder() {
