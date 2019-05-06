@@ -34,7 +34,7 @@ public class DummyObject {
         this.fieldV2 = fieldV2;
     }
 
-    public String fieldV1;
+    public String fieldV1; // NOSONAR
 
-    public String fieldV2;
+    public String fieldV2; // NOSONAR
 }

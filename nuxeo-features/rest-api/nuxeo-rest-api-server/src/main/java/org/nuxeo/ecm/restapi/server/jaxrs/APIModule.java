@@ -83,7 +83,7 @@ public class APIModule extends WebEngineModule {
     /**
      * Provider to inject the {@link APIVersion} object if present in the request attributes.
      * <p>
-     * Throws a {@link NuxeoException} if trying to inject an {@link APIVersion} while there is no in the request
+     * Throws a {@link NuxeoException} if trying to inject an {@link APIVersion} while there is none in the request
      * attributes.
      *
      * @since 11.1

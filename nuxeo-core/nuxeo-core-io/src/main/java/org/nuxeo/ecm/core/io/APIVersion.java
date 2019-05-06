@@ -22,9 +22,12 @@ package org.nuxeo.ecm.core.io;
 import static javax.servlet.http.HttpServletResponse.SC_BAD_REQUEST;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import javax.validation.constraints.NotNull;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.nuxeo.ecm.core.api.NuxeoException;
@@ -42,16 +45,19 @@ public enum APIVersion {
 
     public static final String API_VERSION_ATTRIBUTE_NAME = "APIVersion";
 
-    public static final Map<Integer, APIVersion> VALID_VERSIONS = Stream.of(
-            APIVersion.values()).collect(Collectors.toMap(v -> v.version, Functions.identity()));
+    public static final Comparator<APIVersion> COMPARATOR = Comparator.comparingInt(v -> v.version);
 
-    public static final APIVersion LAST_VERSION = Stream.of(APIVersion.values())
-                                                        .max(Comparator.comparingInt(v -> v.version))
-                                                        .orElseThrow(
-                                                                () -> new NuxeoException("No REST API version found"));
+    public static final Map<Integer, APIVersion> VALID_VERSIONS = Stream.of(values())
+                                                                        .sorted(COMPARATOR)
+                                                                        .collect(Collectors.toMap(v -> v.version,
+                                                                                Functions.identity(), (v, w) -> v,
+                                                                                LinkedHashMap::new));
+
+    public static final APIVersion LATEST_VERSION = Stream.of(
+            values()).max(COMPARATOR).orElseThrow(() -> new NuxeoException("No REST API version found"));
 
     /**
-     * Returns the {@code APIVersion} object for given the {@code version}.
+     * Returns the {@code APIVersion} object for the given {@code version}.
      *
      * @throws NuxeoException if the {@code version} is not a valid REST API version.
      */
@@ -66,10 +72,10 @@ public enum APIVersion {
     }
 
     /**
-     * Returns the last REST API version.
+     * Returns the latest REST API version.
      */
-    public static APIVersion last() {
-        return LAST_VERSION;
+    public static APIVersion latest() {
+        return LATEST_VERSION;
     }
 
     protected final int version;
@@ -78,27 +84,27 @@ public enum APIVersion {
         this.version = version;
     }
 
-    public boolean eq(APIVersion other) {
+    public boolean eq(@NotNull APIVersion other) {
         return this.version == other.version;
     }
 
-    public boolean neq(APIVersion other) {
+    public boolean neq(@NotNull APIVersion other) {
         return this.version != other.version;
     }
 
-    public boolean lt(APIVersion other) {
+    public boolean lt(@NotNull APIVersion other) {
         return this.version < other.version;
     }
 
-    public boolean lte(APIVersion other) {
+    public boolean lte(@NotNull APIVersion other) {
         return this.version <= other.version;
     }
 
-    public boolean gt(APIVersion other) {
+    public boolean gt(@NotNull APIVersion other) {
         return this.version > other.version;
     }
 
-    public boolean gte(APIVersion other) {
+    public boolean gte(@NotNull APIVersion other) {
         return this.version >= other.version;
     }
 

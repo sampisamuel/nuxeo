@@ -37,11 +37,13 @@ import com.fasterxml.jackson.core.JsonGenerator;
  *
  * <pre>
  * { "message":"foo" }
+ * </pre>
  * <p>
  * In v2+:
  *
  * <pre>
  * { "message":"bar" }
+ * </pre>
  *
  * @since 11.1
  */

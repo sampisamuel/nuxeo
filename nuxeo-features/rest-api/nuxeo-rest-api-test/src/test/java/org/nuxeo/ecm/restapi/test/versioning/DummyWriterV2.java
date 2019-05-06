@@ -53,7 +53,7 @@ public class DummyWriterV2 extends ExtensibleEntityJsonWriter<DummyObjectV2> {
     }
 
     @Override
-    protected void writeEntityBody(DummyObjectV2 entity, JsonGenerator jg) {
+    protected void writeEntityBody(DummyObjectV2 entity, JsonGenerator jg) { // NOSONAR
     }
 
     @Override

@@ -38,6 +38,7 @@ import org.nuxeo.jaxrs.test.JerseyClientHelper;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
+import org.nuxeo.runtime.test.runner.LogFeature;
 import org.nuxeo.runtime.test.runner.ServletContainerFeature;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -55,10 +56,13 @@ import com.sun.jersey.api.client.WebResource;
 @Deploy("org.nuxeo.ecm.platform.restapi.test:test-marshallers-contrib.xml")
 public class APIVersioningTest {
 
-    protected static ObjectMapper MAPPER = new ObjectMapper();
+    protected static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Inject
     protected ServletContainerFeature servletContainerFeature;
+
+    @Inject
+    protected LogFeature logFeature;
 
     protected Client client;
 
@@ -160,7 +164,7 @@ public class APIVersioningTest {
     }
 
     @Test
-    public void testUpdatedWriter() throws Exception {
+    public void testUpdatedWriter() throws IOException {
         ClientResponse response = getRESTAPIResource(1).path("foo").path("dummy").get(ClientResponse.class);
         try (CloseableClientResponse r = CloseableClientResponse.of(response)) {
             assertEquals(200, r.getStatus());
@@ -179,13 +183,16 @@ public class APIVersioningTest {
     }
 
     @Test
-    public void testNewWriter() throws Exception {
-        ClientResponse response = getRESTAPIResource(1).path("foo").path("dummy2").get(ClientResponse.class);
-        try (CloseableClientResponse r = CloseableClientResponse.of(response)) {
+    public void testNewWriter() throws IOException {
+        logFeature.hideErrorFromConsoleLog();
+        try (CloseableClientResponse r = CloseableClientResponse.of(
+                getRESTAPIResource(1).path("foo").path("dummy2").get(ClientResponse.class))) {
             assertEquals(500, r.getStatus());
+        } finally {
+            logFeature.restoreConsoleLog();
         }
 
-        response = getRESTAPIResource(2).path("foo").path("dummy2").get(ClientResponse.class);
+        ClientResponse response = getRESTAPIResource(2).path("foo").path("dummy2").get(ClientResponse.class);
         try (CloseableClientResponse r = CloseableClientResponse.of(response)) {
             assertEquals(200, r.getStatus());
             JsonNode jsonNode = MAPPER.readTree(r.getEntityInputStream());
@@ -210,7 +217,7 @@ public class APIVersioningTest {
     }
 
     @Test
-    public void testUpdatedEnricher() throws Exception {
+    public void testUpdatedEnricher() throws IOException {
         ClientResponse response = getRESTAPIResource(1).path("foo")
                                                        .path("dummy")
                                                        .header("enrichers.dummy", "dummy")
@@ -235,7 +242,7 @@ public class APIVersioningTest {
     }
 
     @Test
-    public void testNewEnricher() throws Exception {
+    public void testNewEnricher() throws IOException {
         ClientResponse response = getRESTAPIResource(1).path("foo")
                                                        .path("dummy")
                                                        .header("enrichers.dummy", "dummy2")

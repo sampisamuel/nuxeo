@@ -24,5 +24,5 @@ package org.nuxeo.ecm.restapi.test.versioning;
  *
  * @since 11.1
  */
-public class DummyObjectV2 {
+public class DummyObjectV2 { // NOSONAR
 }

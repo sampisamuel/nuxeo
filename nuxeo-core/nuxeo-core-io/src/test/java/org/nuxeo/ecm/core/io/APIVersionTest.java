@@ -23,8 +23,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.util.Comparator;
-
 import org.junit.Test;
 import org.nuxeo.ecm.core.api.NuxeoException;
 
@@ -34,12 +32,12 @@ import org.nuxeo.ecm.core.api.NuxeoException;
 public class APIVersionTest {
 
     @Test
-    public void testLastVersion() {
-        APIVersion expectedLast = APIVersion.VALID_VERSIONS.values()
-                                                           .stream()
-                                                           .max(Comparator.comparingInt(v -> v.version))
-                                                           .orElseThrow();
-        assertEquals(expectedLast, APIVersion.last());
+    public void testLatestVersion() {
+        APIVersion expectedLatest = APIVersion.VALID_VERSIONS.values()
+                                                             .stream()
+                                                             .max(APIVersion.COMPARATOR)
+                                                             .orElseThrow();
+        assertEquals(expectedLatest, APIVersion.latest());
     }
 
     @Test
