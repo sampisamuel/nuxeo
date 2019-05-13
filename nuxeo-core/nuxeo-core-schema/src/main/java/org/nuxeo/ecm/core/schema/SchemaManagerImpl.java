@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -138,6 +139,9 @@ public class SchemaManagerImpl implements SchemaManager {
 
     /** @since 9.2 */
     protected Map<String, Map<String, String>> removedProperties = new HashMap<>();
+
+    /** @since 11.1 */
+    protected Set<String> securedProperties = new HashSet<>();
 
     public SchemaManagerImpl() {
         recomputeCallbacks = new ArrayList<>();
@@ -902,4 +906,44 @@ public class SchemaManagerImpl implements SchemaManager {
         return clearComplexPropertyBeforeSet;
     }
 
+    /*
+     * ===== Property API =====
+     */
+
+    /**
+     * @since 11.1
+     */
+    protected synchronized void registerSecuredProperty(Collection<PropertyDescriptor> descriptors) {
+        securedProperties = descriptors.stream()
+                                       .filter(PropertyDescriptor::isSecured)
+                                       .map(descriptor -> computePropertyKey(descriptor.schema, descriptor.name))
+                                       .collect(Collectors.toSet());
+    }
+
+    /**
+     * @since 11.1
+     */
+    protected synchronized void clearSecuredProperty() {
+        securedProperties.clear();
+    }
+
+    /**
+     * @since 11.1
+     */
+    @Override
+    public boolean isSecured(String schema, String path) {
+        // remove index from path - we're only interested in /index/ because we can't add info on sth/* property
+        path = path.replaceAll("/-?\\d+/", "/*/");
+        for (String key = computePropertyKey(schema, path); //
+             StringUtils.isNotBlank(key); key = key.substring(0, Math.max(key.lastIndexOf('/'), 0))) {
+            if (securedProperties.contains(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    protected String computePropertyKey(String schema, String path) {
+        return schema + ':' + path;
+    }
 }
