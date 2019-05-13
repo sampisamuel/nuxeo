@@ -19,6 +19,8 @@
  */
 package org.nuxeo.ecm.core.api.model.impl;
 
+import static org.apache.commons.lang3.StringUtils.substringAfterLast;
+
 import java.io.Serializable;
 import java.util.Iterator;
 import java.util.regex.Matcher;
@@ -29,6 +31,7 @@ import org.apache.commons.logging.LogFactory;
 import org.nuxeo.common.utils.Path;
 import org.nuxeo.ecm.core.api.NuxeoException;
 import org.nuxeo.ecm.core.api.PropertyException;
+import org.nuxeo.ecm.core.api.local.ClientLoginModule;
 import org.nuxeo.ecm.core.api.model.DocumentPart;
 import org.nuxeo.ecm.core.api.model.Property;
 import org.nuxeo.ecm.core.api.model.PropertyConversionException;
@@ -36,6 +39,7 @@ import org.nuxeo.ecm.core.api.model.PropertyNotFoundException;
 import org.nuxeo.ecm.core.api.model.ReadOnlyPropertyException;
 import org.nuxeo.ecm.core.api.model.resolver.PropertyObjectResolver;
 import org.nuxeo.ecm.core.api.model.resolver.PropertyObjectResolverImpl;
+import org.nuxeo.ecm.core.schema.PropertyCharacteristicHandler;
 import org.nuxeo.ecm.core.schema.PropertyDeprecationHandler;
 import org.nuxeo.ecm.core.schema.SchemaManager;
 import org.nuxeo.ecm.core.schema.types.Schema;
@@ -379,6 +383,14 @@ public abstract class AbstractProperty implements Property {
         return deprecated.booleanValue();
     }
 
+    protected boolean isSecured() {
+        PropertyCharacteristicHandler propertyHandler = Framework.getService(PropertyCharacteristicHandler.class);
+        // remove prefix
+        String xPath = getXPath();
+        String path = xPath.substring(xPath.lastIndexOf(':') + 1);
+        return propertyHandler.isSecured(getSchema().getName(), path) && !ClientLoginModule.isCurrentAdministrator();
+    }
+
     @Override
     public <T> T getValue(Class<T> type) throws PropertyException {
         return convertTo(getValue(), type);
@@ -386,9 +398,10 @@ public abstract class AbstractProperty implements Property {
 
     @Override
     public void setValue(Object value) throws PropertyException {
-        // 1. check the read only flag
-        if (isReadOnly()) {
-            throw new ReadOnlyPropertyException(getXPath());
+        // 1. check the read only flag or security flag
+        if (isReadOnly() || isSecured()) {
+            throw new ReadOnlyPropertyException(
+                    String.format("Cannot set the value of property: %s since it is readonly", getXPath()));
         }
         // 1. normalize the value
         Serializable normalizedValue = normalize(value);
