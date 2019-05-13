@@ -36,11 +36,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.nuxeo.common.Environment;
 import org.nuxeo.common.utils.FileUtils;
 import org.nuxeo.ecm.core.schema.types.AnyType;
@@ -53,7 +54,6 @@ import org.nuxeo.ecm.core.schema.types.QName;
 import org.nuxeo.ecm.core.schema.types.Schema;
 import org.nuxeo.ecm.core.schema.types.Type;
 import org.nuxeo.ecm.core.schema.types.TypeException;
-
 import org.xml.sax.SAXException;
 
 /**
@@ -135,6 +135,11 @@ public class SchemaManagerImpl implements SchemaManager {
     public static final boolean CLEAR_COMPLEX_PROP_BEFORE_SET_DEFAULT = false; // COMPAT
 
     protected List<Runnable> recomputeCallbacks;
+
+    protected List<PropertyDescriptor> allSecuredProperties = new ArrayList<>();
+
+    /** @since 11.1 */
+    protected Set<String> securedProperties = new HashSet<>();
 
     public SchemaManagerImpl() {
         recomputeCallbacks = new ArrayList<>();
@@ -315,6 +320,7 @@ public class SchemaManagerImpl implements SchemaManager {
         recomputeDocumentTypes(); // depend on schemas and facets
         recomputeProxies(); // depend on schemas
         fields.clear(); // re-filled lazily
+        recomputeSecuredProperties();
     }
 
     /*
@@ -848,4 +854,50 @@ public class SchemaManagerImpl implements SchemaManager {
         return clearComplexPropertyBeforeSet;
     }
 
+    /*
+     * ===== Property API =====
+     */
+
+    /**
+     * @since 11.1
+     */
+    protected synchronized void registerSecuredProperty(PropertyDescriptor descriptor) {
+        allSecuredProperties.add(descriptor);
+    }
+
+    /**
+     * @since HF
+     */
+    protected synchronized void unregisterSecuredProperty(PropertyDescriptor descriptor) {
+        allSecuredProperties.remove(descriptor);
+    }
+
+    protected void recomputeSecuredProperties() {
+        securedProperties = allSecuredProperties.stream()
+                                                .filter(PropertyDescriptor::isSecured)
+                                                .collect(Collectors.collectingAndThen(
+                                                        Collectors.toMap(d -> computePropertyKey(d.schema, d.name),
+                                                                         Function.identity(),
+                                                                         PropertyDescriptor::merge), Map::keySet));
+    }
+
+    /**
+     * @since 11.1
+     */
+    @Override
+    public boolean isSecured(String schema, String path) {
+        // remove index from path - we're only interested in /index/ because we can't add info on sth/* property
+        path = path.replaceAll("/-?\\d+/", "/*/");
+        for (String key = computePropertyKey(schema, path); //
+             StringUtils.isNotBlank(key); key = key.substring(0, Math.max(key.lastIndexOf('/'), 0))) {
+            if (securedProperties.contains(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    protected String computePropertyKey(String schema, String path) {
+        return schema + ':' + path;
+    }
 }
