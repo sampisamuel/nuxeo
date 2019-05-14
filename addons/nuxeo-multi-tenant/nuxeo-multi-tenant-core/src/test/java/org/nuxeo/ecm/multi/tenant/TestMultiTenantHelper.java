@@ -31,6 +31,7 @@ import org.nuxeo.runtime.test.runner.FeaturesRunner;
 @RunWith(FeaturesRunner.class)
 @Features(PlatformFeature.class)
 @RepositoryConfig(cleanup = Granularity.METHOD)
+@Deploy("org.nuxeo.ecm.platform.login")
 @Deploy("org.nuxeo.ecm.multi.tenant")
 @Deploy("org.nuxeo.ecm.platform.userworkspace.core")
 @Deploy("org.nuxeo.ecm.core.cache")
