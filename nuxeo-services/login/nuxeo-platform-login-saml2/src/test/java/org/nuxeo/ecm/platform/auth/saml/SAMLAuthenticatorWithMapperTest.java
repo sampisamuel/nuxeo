@@ -46,6 +46,7 @@ import org.nuxeo.ecm.core.test.DefaultRepositoryInit;
 import org.nuxeo.ecm.core.test.annotations.Granularity;
 import org.nuxeo.ecm.core.test.annotations.RepositoryConfig;
 import org.nuxeo.ecm.platform.api.login.UserIdentificationInfo;
+import org.nuxeo.ecm.platform.test.PlatformFeature;
 import org.nuxeo.ecm.platform.usermanager.UserManager;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.Features;
@@ -63,12 +64,10 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 @RunWith(FeaturesRunner.class)
-@Features({ UserMapperFeature.class, DirectoryFeature.class })
+@Features({ PlatformFeature.class, UserMapperFeature.class })
 @RepositoryConfig(init = DefaultRepositoryInit.class, cleanup = Granularity.METHOD)
 @Deploy("org.nuxeo.ecm.platform.login.saml2")
-@Deploy("org.nuxeo.ecm.platform.login.saml2:OSGI-INF/test-sql-directory.xml")
 @Deploy("org.nuxeo.ecm.platform.login.saml2:OSGI-INF/usermapper-contribs.xml")
-@Deploy("org.nuxeo.ecm.platform.usermanager")
 public class SAMLAuthenticatorWithMapperTest {
 
     @Inject
