@@ -18,6 +18,9 @@
  */
 package org.nuxeo.ecm.core.schema;
 
+import java.util.Optional;
+import java.util.Set;
+
 /**
  * Handler used to provide property's characteristics.
  *
@@ -33,4 +36,41 @@ public interface PropertyCharacteristicHandler {
      * @return whether or not the given property is secured (ie: only administrators can edit it)
      */
     boolean isSecured(String schema, String path);
+
+    /**
+     * @param schema the schema name (not the prefix)
+     * @param path the property path to test (without the prefix)
+     * @return whether or not this property is marked as deprecated
+     */
+    boolean isDeprecated(String schema, String path);
+
+    /**
+     * @param schema the schema name (not the prefix)
+     * @param path the property path to test (without the prefix)
+     * @return whether or not this property is marked as removed
+     */
+    boolean isRemoved(String schema, String path);
+
+    /**
+     * The returned path are not Nuxeo xpath as they don't have the schema prefix.
+     *
+     * @param schema the schema name (not the prefix)
+     * @return a {@link Set} holding the deprecated property path
+     */
+    Set<String> getDeprecatedProperties(String schema);
+
+    /**
+     * The returned path are not Nuxeo xpath as they don't have the schema prefix.
+     *
+     * @param schema the schema name (not the prefix)
+     * @return a {@link Set} holding the removed property path
+     */
+    Set<String> getRemovedProperties(String schema);
+
+    /**
+     * @param schema the schema name (not the prefix)
+     * @param path the property path to test (without the prefix)
+     * @return fallback associated to this property if exist
+     */
+    Optional<String> getFallback(String schema, String path);
 }

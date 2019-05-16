@@ -19,10 +19,9 @@
  */
 package org.nuxeo.ecm.core.api.model.impl;
 
-import static org.apache.commons.lang3.StringUtils.substringAfterLast;
-
 import java.io.Serializable;
 import java.util.Iterator;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,8 +39,6 @@ import org.nuxeo.ecm.core.api.model.ReadOnlyPropertyException;
 import org.nuxeo.ecm.core.api.model.resolver.PropertyObjectResolver;
 import org.nuxeo.ecm.core.api.model.resolver.PropertyObjectResolverImpl;
 import org.nuxeo.ecm.core.schema.PropertyCharacteristicHandler;
-import org.nuxeo.ecm.core.schema.PropertyDeprecationHandler;
-import org.nuxeo.ecm.core.schema.SchemaManager;
 import org.nuxeo.ecm.core.schema.types.Schema;
 import org.nuxeo.ecm.core.schema.types.resolver.ObjectResolver;
 import org.nuxeo.runtime.api.Framework;
@@ -69,10 +66,6 @@ public abstract class AbstractProperty implements Property {
     public boolean forceDirty = false;
 
     protected int flags;
-
-    protected Boolean deprecated;
-
-    protected Property deprecatedFallback;
 
     protected AbstractProperty(Property parent) {
         this.parent = parent;
@@ -351,44 +344,37 @@ public abstract class AbstractProperty implements Property {
     }
 
     protected boolean isDeprecated() {
-        if (deprecated == null) {
-            boolean localDeprecated = false;
-            // compute the deprecated state
-            // first check if this property is a child of a deprecated property
-            if (parent instanceof AbstractProperty) {
-                AbstractProperty absParent = (AbstractProperty) parent;
-                localDeprecated = absParent.isDeprecated();
-                Property parentDeprecatedFallback = absParent.deprecatedFallback;
-                if (localDeprecated && parentDeprecatedFallback != null) {
-                    deprecatedFallback = parentDeprecatedFallback.resolvePath(getName());
-                }
-            }
-            if (!localDeprecated) {
-                // check if this property is deprecated
-                String name = getXPath();
-                String schema = getSchema().getName();
-                SchemaManager schemaManager = Framework.getService(SchemaManager.class);
-                PropertyDeprecationHandler deprecatedProperties = schemaManager.getDeprecatedProperties();
-                localDeprecated = deprecatedProperties.isMarked(schema, name);
-                if (localDeprecated) {
-                    // get the possible fallback
-                    String fallback = deprecatedProperties.getFallback(schema, name);
-                    if (fallback != null) {
-                        deprecatedFallback = resolvePath('/' + fallback);
-                    }
-                }
-            }
-            deprecated = Boolean.valueOf(localDeprecated);
+        PropertyCharacteristicHandler propertyHandler = Framework.getService(PropertyCharacteristicHandler.class);
+        String path = getXPathWithoutPrefix();
+        return propertyHandler.isDeprecated(getSchema().getName(), path);
+    }
+
+    /**
+     * Return the {@link Property} fallback to use if the current property is deprecated.
+     *
+     * @return the fallback as {@link Property} if exist
+     */
+    protected Optional<Property> getDeprecatedFallback() {
+        if (parent instanceof AbstractProperty && ((AbstractProperty) parent).isDeprecated()) {
+            return ((AbstractProperty) parent).getDeprecatedFallback().map(p -> p.resolvePath(getName()));
         }
-        return deprecated.booleanValue();
+        PropertyCharacteristicHandler propertyHandler = Framework.getService(PropertyCharacteristicHandler.class);
+        String path = getXPathWithoutPrefix();
+        return propertyHandler.getFallback(getSchema().getName(), path).map(f -> resolvePath('/' + f));
     }
 
     protected boolean isSecured() {
         PropertyCharacteristicHandler propertyHandler = Framework.getService(PropertyCharacteristicHandler.class);
-        // remove prefix
-        String xPath = getXPath();
-        String path = xPath.substring(xPath.lastIndexOf(':') + 1);
+        String path = getXPathWithoutPrefix();
         return propertyHandler.isSecured(getSchema().getName(), path) && !ClientLoginModule.isCurrentAdministrator();
+    }
+
+    /**
+     * The method is private on purpose because we don't want to expose it.
+     */
+    private String getXPathWithoutPrefix() {
+        String xPath = getXPath();
+        return xPath.substring(xPath.lastIndexOf(':') + 1);
     }
 
     @Override
@@ -426,16 +412,17 @@ public abstract class AbstractProperty implements Property {
     protected void setValueDeprecation(Object value, boolean setFallback) throws PropertyException {
         if (isDeprecated()) {
             // First check if we need to set the fallback value
-            if (setFallback && deprecatedFallback != null) {
-                deprecatedFallback.setValue(value);
+            Optional<Property> deprecatedFallback = getDeprecatedFallback();
+            if (setFallback) {
+                deprecatedFallback.ifPresent(p -> p.setValue(value));
             }
             // Second check if we need to log deprecation message
             if (log.isWarnEnabled()) {
                 StringBuilder msg = newDeprecatedMessage();
                 msg.append("Set value to deprecated property");
-                if (deprecatedFallback != null) {
-                    msg.append(" and to fallback property '").append(deprecatedFallback.getXPath()).append("'");
-                }
+                deprecatedFallback.ifPresent(
+                        p -> msg.append(" and to fallback property '").append(p.getXPath()).append("'"));
+
                 if (log.isTraceEnabled()) {
                     log.warn(msg, new NuxeoException("debug stack trace"));
                 } else {
@@ -478,25 +465,22 @@ public abstract class AbstractProperty implements Property {
      */
     protected Serializable getValueDeprecation() {
         if (isDeprecated()) {
+            Optional<Property> deprecatedFallback = getDeprecatedFallback();
             // Check if we need to log deprecation message
             if (log.isWarnEnabled()) {
                 StringBuilder msg = newDeprecatedMessage();
-                if (deprecatedFallback == null) {
-                    msg.append("Return value from deprecated property");
-                } else {
-                    msg.append("Return value from '")
-                       .append(deprecatedFallback.getXPath())
-                       .append("' if not null, from deprecated property otherwise");
-                }
+                deprecatedFallback.ifPresentOrElse(
+                        p -> msg.append("Return value from '")
+                                .append(p.getXPath())
+                                .append("' if not null, from deprecated property otherwise"),
+                        () -> msg.append("Return value from deprecated property"));
                 if (log.isTraceEnabled()) {
                     log.warn(msg, new NuxeoException());
                 } else {
                     log.warn(msg);
                 }
             }
-            if (deprecatedFallback != null) {
-                return deprecatedFallback.getValue();
-            }
+            return deprecatedFallback.map(Property::getValue).orElse(null);
         }
         return null;
     }
@@ -614,39 +598,35 @@ public abstract class AbstractProperty implements Property {
     protected Property computeRemovedProperty(String name) {
         String schema = getSchema().getName();
         // name is only the property name we try to get, build its path in order to check it against configuration
-        String originalXpath = collectPath(new Path("/")).append(name).toString().substring(1);
-        String xpath;
+        String originalPath = collectPath(new Path("/")).append(name).toString().substring(1);
+        String path;
         // replace all something[..] in a path by *, for example files/item[2]/filename -> files/*/filename
-        if (originalXpath.indexOf('[') != -1) {
-            xpath = NON_CANON_INDEX.matcher(originalXpath).replaceAll("*");
+        if (originalPath.indexOf('[') != -1) {
+            path = NON_CANON_INDEX.matcher(originalPath).replaceAll("*");
         } else {
-            xpath = originalXpath;
+            path = originalPath;
         }
-        SchemaManager schemaManager = Framework.getService(SchemaManager.class);
-        PropertyDeprecationHandler removedProperties = schemaManager.getRemovedProperties();
-        if (!removedProperties.isMarked(schema, xpath)) {
+        PropertyCharacteristicHandler propertyHandler = Framework.getService(PropertyCharacteristicHandler.class);
+        if (!propertyHandler.isRemoved(schema, path)) {
             return null;
         }
-        String fallback = removedProperties.getFallback(schema, xpath);
-        if (fallback == null) {
-            return new RemovedProperty(this, name);
-        }
-
-        // Retrieve fallback property
-        Matcher matcher = NON_CANON_INDEX.matcher(originalXpath);
-        while (matcher.find()) {
-            fallback = fallback.replaceFirst("\\*", matcher.group(0));
-        }
-        Property fallbackProperty;
-        // Handle creation of complex property in a list ie: xpath contains [-1]
-        int i = fallback.lastIndexOf("[-1]");
-        if (i != -1) {
-            // skip [-1]/ to get next property
-            fallbackProperty = get(fallback.substring(i + 5));
-        } else {
-            fallbackProperty = resolvePath('/' + fallback);
-        }
-        return new RemovedProperty(this, name, fallbackProperty);
+        return propertyHandler.getFallback(schema, path).map(fallback -> {
+            // Retrieve fallback property
+            Matcher matcher = NON_CANON_INDEX.matcher(originalPath);
+            while (matcher.find()) {
+                fallback = fallback.replaceFirst("\\*", matcher.group(0));
+            }
+            Property fallbackProperty;
+            // Handle creation of complex property in a list ie: path contains [-1]
+            int i = fallback.lastIndexOf("[-1]");
+            if (i != -1) {
+                // skip [-1]/ to get next property
+                fallbackProperty = get(fallback.substring(i + 5));
+            } else {
+                fallbackProperty = resolvePath('/' + fallback);
+            }
+            return new RemovedProperty(this, name, fallbackProperty);
+        }).orElseGet(() -> new RemovedProperty(this, name));
     }
 
     @Override
