@@ -65,6 +65,9 @@ public class ConverterDescriptor implements Serializable {
     @XNode("@type")
     protected String converterType = CUSTOM_CONVERTER_TYPE;
 
+    @XNode("@bypassIfSameMimeType")
+    protected boolean bypassIfSameMimeType = false;
+
     protected boolean wrappedTransformer = false;
 
     @XNodeMap(value = "parameters/parameter", key = "@name", type = HashMap.class, componentType = String.class)
@@ -75,6 +78,15 @@ public class ConverterDescriptor implements Serializable {
 
     @XNodeList(value = "conversionSteps/subconverter", type = ArrayList.class, componentType = String.class)
     protected List<String> subConverters = new ArrayList<>();
+
+    /**
+     * Returns if the converter is expected to make a conversion or just return the input.
+     *
+     * @since 11.1
+     */
+    public boolean isBypassIfSameMimeTypet() {
+        return bypassIfSameMimeType;
+    }
 
     public String getConverterName() {
         return converterName;

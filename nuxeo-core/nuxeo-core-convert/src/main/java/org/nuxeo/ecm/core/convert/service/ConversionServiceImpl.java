@@ -299,6 +299,17 @@ public class ConversionServiceImpl extends DefaultComponent implements Conversio
     public BlobHolder convert(String converterName, BlobHolder blobHolder, Map<String, Serializable> parameters)
             throws ConversionException {
 
+        ConverterDescriptor desc = converterDescriptors.get(converterName);
+        if (desc == null) {
+            throw new ConversionException("Converter " + converterName + " can not be found", blobHolder);
+        }
+
+        // Check if conversion is unwanted
+        String mimeType = blobHolder.getBlob().getMimeType();
+        if (desc.isBypassIfSameMimeTypet() && desc.getDestinationMimeType().equals(mimeType)) {
+            return blobHolder;
+        }
+
         // set parameters if null to avoid NPE in converters
         if (parameters == null) {
             parameters = new HashMap<>();
@@ -311,13 +322,7 @@ public class ConversionServiceImpl extends DefaultComponent implements Conversio
             throw new ConverterNotAvailable(converterName, blobHolder);
         }
 
-        ConverterDescriptor desc = converterDescriptors.get(converterName);
-        if (desc == null) {
-            throw new ConversionException("Converter " + converterName + " can not be found", blobHolder);
-        }
-
         // make sure the converter can handle the blob mime type
-        String mimeType = blobHolder.getBlob().getMimeType();
         if (!hasSourceMimeType(desc, mimeType)) {
             throw new ConversionException(
                     String.format("%s mime type not supported by %s converter", mimeType, desc.getConverterName()),
